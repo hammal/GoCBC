@@ -5,7 +5,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/hammal/ssm"
+	"github.com/hammal/adc/signal"
+	"github.com/hammal/adc/ssm"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -33,7 +34,7 @@ func TestCompute(y *testing.T) {
 	}
 	stateTransitionMatrix := mat.NewDense(9, 9, data)
 	inputvector := mat.NewVecDense(9, []float64{1, 0, 0, 0, 0, 0, 0, 0, 0})
-	inputs := ssm.NewInput(func(arg1 float64) float64 { return arg1 }, inputvector)
+	inputs := signal.NewInput(func(arg1 float64) float64 { return arg1 }, inputvector)
 	observationVector := mat.NewDense(1, 9, []float64{0, 0, 0, 0, 0, 0, 0, 0, 1})
 	sys := ssm.NewLinearStateSpaceModel(stateTransitionMatrix, observationVector, inputs)
 	odeObject.Compute(t0, t1, initState, sys)

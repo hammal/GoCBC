@@ -2,8 +2,6 @@ package adc
 
 import (
 	"github.com/hammal/adc/control"
-	"github.com/hammal/adc/reconstructor"
-	"github.com/hammal/adc/simulator"
 )
 
 // ADC is the overall interface for controlling the simulation and reconstruction

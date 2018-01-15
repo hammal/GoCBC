@@ -1,4 +1,4 @@
-package simulator
+package adc
 
 // System struct contains all relevant system parameters for the simulator
 type System struct {

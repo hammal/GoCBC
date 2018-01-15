@@ -1,4 +1,4 @@
-package ssm
+package signal
 
 import (
 	"math"
@@ -6,8 +6,8 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-// VectorFunction is an input ssm abstraction that instead of returning
-// a scalar assoisates each argument with a vector valued output. For instance
+// VectorFunction is an input stateSpaceModel abstraction that instead of returning
+// a scalar associates each argument with a vector valued output. For instance
 // in the state space model:
 // X'(t) = AX(t) + BU(t)
 // BU(t) is a vectorial function decomposed as a scalar function U(t)-> Reals
@@ -18,14 +18,20 @@ type VectorFunction struct {
 	B *mat.VecDense
 }
 
-// Bu returns the vectorial function
-// B u(t)
+// Bu is an alias in the state space model:
+//
+// Ax + Bu(t)
+// where Bu(t) is a vectorial function
 func (vf VectorFunction) Bu(t float64) *mat.VecDense {
-	m, _ := vf.B.Dims()
-	res := mat.NewVecDense(m, nil)
+	return vf.Value(t)
+}
+
+// Value returns the vectorial function value
+func (vf VectorFunction) Value(t float64) *mat.VecDense {
+	var res mat.VecDense
 	res.CloneVec(vf.B)
-	res.ScaleVec(vf.U(t), res)
-	return res
+	res.ScaleVec(vf.U(t), &res)
+	return &res
 }
 
 // func (vf VectorFunction) Du(t float64) *mat.VecDense {

@@ -1,10 +1,10 @@
-package simulator
+package simulate
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/hammal/ssm"
+	"github.com/hammal/stateSpaceModel"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -16,10 +16,10 @@ func TestNewLinearStateSpaceSimulator(t *testing.T) {
 	var n int = 10
 	data := make([]float64, n)
 	data[0] = 1.
-	inp := ssm.NewInput(func(arg1 float64) float64 { return 1 }, mat.NewVecDense(n, data))
+	inp := stateSpaceModel.NewInput(func(arg1 float64) float64 { return 1 }, mat.NewVecDense(n, data))
 
-	sm := make([]ssm.LinearStateSpaceModel, 1)
-	sm[0] = *ssm.NewIntegratorChain(n, 10, inp)
+	sm := make([]stateSpaceModel.LinearStateSpaceModel, 1)
+	sm[0] = *stateSpaceModel.NewIntegratorChain(n, 10, inp)
 	sys := System{1., 0., 19., 1000, 1, 1}
 	newLinearStateSpaceSimulator := NewLinearStateSpaceSimulator(sys, sm)
 

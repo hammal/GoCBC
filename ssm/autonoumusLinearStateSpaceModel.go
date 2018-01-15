@@ -20,7 +20,7 @@ type AutonomousLinearStateSpaceModel struct {
 func (model AutonomousLinearStateSpaceModel) StateObservation(t float64, state *mat.VecDense) *mat.VecDense {
 	m2, _ := model.A.Dims()
 	if m1, _ := state.Dims(); m1 != m2 {
-		panic(errors.New("State vector doesn't match state transistion matrix"))
+		panic(errors.New("State vector doesn't match state transition matrix"))
 	}
 	mC, _ := model.C.Dims()
 	res := mat.NewVecDense(mC, nil)

@@ -1,6 +1,7 @@
 package ssm
 
 import (
+	"github.com/hammal/adc/signal"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -8,7 +9,7 @@ type MemoryLessLinearStateSpaceModel struct {
 	// Observation matrix
 	C *mat.Dense
 	// input
-	Input VectorFunction
+	Input signal.VectorFunction
 }
 
 // StateDerivative returns the state derivative.

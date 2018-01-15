@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/hammal/adc/signal"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -20,12 +21,12 @@ type LinearStateSpaceModel struct {
 	// Observation matrix
 	C *mat.Dense
 	// List of input functions
-	Input VectorFunction
+	Input signal.VectorFunction
 }
 
 // NewIntegratorChain returns a linear state space model of an integrator chain
 // of size N with input.
-func NewIntegratorChain(N int, stageGain float64, input VectorFunction) *LinearStateSpaceModel {
+func NewIntegratorChain(N int, stageGain float64, input signal.VectorFunction) *LinearStateSpaceModel {
 	a := make([]float64, N*N)
 	c := make([]float64, N)
 	stride := N
@@ -43,7 +44,7 @@ func NewIntegratorChain(N int, stageGain float64, input VectorFunction) *LinearS
 }
 
 // NewLinearStateSpaceModel creates a new Linear state space model
-func NewLinearStateSpaceModel(A, C *mat.Dense, input VectorFunction) *LinearStateSpaceModel {
+func NewLinearStateSpaceModel(A, C *mat.Dense, input signal.VectorFunction) *LinearStateSpaceModel {
 	// Check that system parameters match
 	m, n := A.Dims()
 	_, nC := C.Dims()

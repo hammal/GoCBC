@@ -1,11 +1,11 @@
 // Package ode is a ordinary differential equation library that implements the
 // Runge-Kutta methods https://en.wikipedia.org/wiki/Runge–Kutta_methods.
-// The package requires a state space model, from the https://github.com/hammal/ssm
+// The package requires a state space model, from the https://github.com/hammal/stateSpaceModel
 // package, to describe the system.
 package ode
 
 import (
-	"github.com/hammal/ssm"
+	"github.com/hammal/adc/ssm"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -17,7 +17,7 @@ type RungeKutta struct {
 // Compute the update for a Runge kutta system based on a current value at t = from
 // , a target time t = to, a intial value x(t=from) = value and a system model ode.
 // When algorithm is finished the result is copied into the value.
-func (rk RungeKutta) Compute(from, to float64, value *mat.VecDense, ode ssm.SSM) {
+func (rk RungeKutta) Compute(from, to float64, value *mat.VecDense, ode ssm.StateSpaceModel) {
 	// State order
 	M, _ := value.Dims()
 	// The precomputed derivative points

@@ -5,7 +5,7 @@ This is my state space implementation of Go.
 
 ## Overview
 This package is fundamentally intended to hold a state space model specified by a
-- State transistion matrix A
+- State transition matrix A
 - Input vector B
 - Observation Vector C
 - and D vector
