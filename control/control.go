@@ -10,9 +10,12 @@ type Control interface {
 	// Get the control contribution for simulation at index
 	getControlSimulationContribution(index int) []mat.Vector
 	// Get the control contribution for filtering at index
-	GetCotnrolFilterContribution(index int) []mat.Vector
+	GetForwardControlFilterContribution(index int) []mat.Vector
+	GetBackwardControlFilterContribution(index int) []mat.Vector
 	// Precompute filter descisions
 	PreComputeFilterContributions(eta2 []float64, Vf mat.Vector, Vb mat.Vector)
+	// Length of control
+	Length() int
 }
 
 func zeroOrderHold(m *mat.Dense, t float64) mat.Matrix {

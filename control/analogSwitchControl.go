@@ -53,7 +53,6 @@ func NewAnalogSwitchControl(length int, controls []*mat.VecDense, ts, t0 float64
 	}
 
 	return &analogSwitchControl{
-		length,
 		numberOfControls,
 		ts,
 		t0,
@@ -68,8 +67,6 @@ func NewAnalogSwitchControl(length int, controls []*mat.VecDense, ts, t0 float64
 // analogSwitchControl is the implementation of control with
 // open analog switches.
 type analogSwitchControl struct {
-	// Number of samples
-	Length int
 	// Number of controls
 	NumberOfControls int
 	// Sampling period
@@ -94,10 +91,14 @@ func (c *analogSwitchControl) Simulate() {
 	t1 := t0 + c.Ts
 	rk := ode.NewRK4()
 	var tmpCtrl []*mat.VecDense
-	for index := 0; index < c.Length; index++ {
+	for index := 0; index < c.Length(); index++ {
 		// Update control based on current state
 		c.updateControl(index)
 		// Simulate the ADC without control
+		// There is a complication here since we now the exact state dynamics
+		// if the state space model was a linear model. Thus this could be realized
+		// using a pre-computed Ad=e^(A Ts) and then using the Runge-Kutta method
+		// with zero initial state.
 		rk.Compute(t0, t1, c.state, c.stateSpaceModel)
 		// Get the control contributions
 		tmpCtrl = c.getControlSimulationContribution(index)
@@ -130,8 +131,8 @@ func (c *analogSwitchControl) updateControl(index int) {
 // GetControlSimulationContribution returns the control decision vector
 // for simulation.
 func (c *analogSwitchControl) getControlSimulationContribution(index int) []*mat.VecDense {
-	// Check that index exsists
-	if index < 0 || index > c.Length-1 {
+	// Check that index exists
+	if index < 0 || index > c.Length()-1 {
 		panic(errors.New("Index out of range"))
 	}
 
@@ -149,13 +150,13 @@ func (c *analogSwitchControl) getControlSimulationContribution(index int) []*mat
 // GetControlFilterContribution returns the control decision vector
 // for simulation.
 func (c *analogSwitchControl) GetControlFilterContribution(index int) ([]*mat.VecDense, error) {
-	// Check that index exsists
-	if index < 0 || index > c.Length-1 {
+	// Check that index exists
+	if index < 0 || index > c.Length()-1 {
 		return nil, errors.New("index out of range")
 	}
-	// Check that there are precomputed filter descisions
+	// Check that there are precomputed filter decisions
 	if c.controlFilterLookUp == nil {
-		return nil, errors.New("No pre computed filter descisions.")
+		return nil, errors.New("No pre-computed filter decisions.")
 	}
 
 	tmp := make([]*mat.VecDense, c.NumberOfControls)
@@ -167,4 +168,8 @@ func (c *analogSwitchControl) GetControlFilterContribution(index int) ([]*mat.Ve
 		tmp[controlIndex] = &c.controlFilterLookUp[controlIndex][decision]
 	}
 	return tmp, nil
+}
+
+func (c analogSwitchControl) Length() int {
+	return len(c.bits)
 }

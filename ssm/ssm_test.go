@@ -13,7 +13,8 @@ func TestNewIntegratorChain(t *testing.T) {
 	N := 5
 	data := make([]float64, N)
 	data[0] = 1.
-	inp := signal.NewInput(func(arg1 float64) float64 { return 1 }, mat.NewVecDense(N, data))
+	inp := make([]signal.VectorFunction, 1)
+	inp[0] = signal.NewInput(func(arg1 float64) float64 { return 1 }, mat.NewVecDense(N, data))
 	stateSpaceModel := NewIntegratorChain(N, 10, inp)
 	fmt.Print(mat.Formatted(stateSpaceModel.A))
 	var zero mat.Dense
@@ -35,7 +36,8 @@ func TestStateSpaceModel(t *testing.T) {
 
 	fmt.Printf("State Space Model:\nA = \n%v\nB = \n%v\nC = \n%v\n", mat.Formatted(A), mat.Formatted(B), mat.Formatted(C))
 
-	inputs := signal.NewInput(func(t float64) float64 { return float64(t) }, B)
+	inputs := make([]signal.VectorFunction, 1)
+	inputs[0] = signal.NewInput(func(t float64) float64 { return float64(t) }, B)
 
 	// Test LinearStateSpaceModel
 	stateSpaceModel := NewLinearStateSpaceModel(A, C, inputs)
@@ -57,7 +59,8 @@ func TestImpulseResponse(t *testing.T) {
 
 	fmt.Printf("State Space Model:\nA = \n%v\nB = \n%v\nC = \n%v\n", mat.Formatted(A), mat.Formatted(B), mat.Formatted(C))
 
-	inputs := signal.NewInput(func(t float64) float64 { return float64(t) }, B)
+	inputs := make([]signal.VectorFunction, 1)
+	inputs[0] = signal.NewInput(func(t float64) float64 { return float64(t) }, B)
 
 	// Test LinearStateSpaceModel
 	stateSpaceModel := NewLinearStateSpaceModel(A, C, inputs)
@@ -75,7 +78,8 @@ func BenchmarkImpulseResponse(b *testing.B) {
 	A := mat.NewDense(3, 3, []float64{1, 0, 0, 1, 0, 0, 0, 1, 0})
 	B := mat.NewVecDense(3, []float64{1, 0, 0})
 	C := mat.NewDense(1, 3, []float64{0, 0, 1})
-	inputs := signal.NewInput(func(t float64) float64 { return float64(t) }, B)
+	inputs := make([]signal.VectorFunction, 1)
+	inputs[0] = signal.NewInput(func(t float64) float64 { return float64(t) }, B)
 
 	// Test LinearStateSpaceModel
 	stateSpaceModel := NewLinearStateSpaceModel(A, C, inputs)

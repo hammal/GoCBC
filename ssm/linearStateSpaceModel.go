@@ -21,12 +21,12 @@ type LinearStateSpaceModel struct {
 	// Observation matrix
 	C *mat.Dense
 	// List of input functions
-	Input signal.VectorFunction
+	Input []signal.VectorFunction
 }
 
 // NewIntegratorChain returns a linear state space model of an integrator chain
 // of size N with input.
-func NewIntegratorChain(N int, stageGain float64, input signal.VectorFunction) *LinearStateSpaceModel {
+func NewIntegratorChain(N int, stageGain float64, input []signal.VectorFunction) *LinearStateSpaceModel {
 	a := make([]float64, N*N)
 	c := make([]float64, N)
 	stride := N
@@ -44,11 +44,11 @@ func NewIntegratorChain(N int, stageGain float64, input signal.VectorFunction) *
 }
 
 // NewLinearStateSpaceModel creates a new Linear state space model
-func NewLinearStateSpaceModel(A, C *mat.Dense, input signal.VectorFunction) *LinearStateSpaceModel {
+func NewLinearStateSpaceModel(A, C *mat.Dense, input []signal.VectorFunction) *LinearStateSpaceModel {
 	// Check that system parameters match
 	m, n := A.Dims()
 	_, nC := C.Dims()
-	mB, _ := input.B.Dims()
+	mB, _ := input[0].B.Dims()
 	if m != n || nC != m || mB != m {
 		panic(errors.New("System Parameters don't match"))
 	}
@@ -71,8 +71,9 @@ func (model LinearStateSpaceModel) StateDerivative(t float64, state *mat.VecDens
 	// Build input vector
 	// tempInput = B input[0](t) ... + B input[N](t)
 	tempInput := mat.NewVecDense(m2, nil)
-	tempInput.AddVec(tempInput, model.Input.Bu(t))
-
+	for _, input := range model.Input {
+		tempInput.AddVec(tempInput, input.Bu(t))
+	}
 	// Compute state transition
 	//  A x(t)
 	state.MulVec(model.A, state)
@@ -133,7 +134,9 @@ func (model LinearStateSpaceModel) ImpulseResponse(t []float64) [][][]float64 {
 			// C e^(tmp * t)
 			tmp2.Mul(model.C, &tmp)
 			var tempInput mat.VecDense
-			tempInput.MulVec(&tmp2, model.Input.B)
+			for _, input := range model.Input {
+				tempInput.MulVec(&tmp2, input.B)
+			}
 			for obs := range res {
 				res[obs][0][i] = tempInput.AtVec(obs)
 			}
@@ -151,6 +154,10 @@ func (ssm LinearStateSpaceModel) StateSpaceOrder() int {
 func (ssm LinearStateSpaceModel) ObservationSpaceOrder() int {
 	m, _ := ssm.C.Dims()
 	return m
+}
+
+func (ssm LinearStateSpaceModel) InputSpaceOrder() int {
+	return len(ssm.Input)
 }
 
 // func (model LinearStateSpaceModel) FrequencyResponse(f []float64) [][][]complex128 {

@@ -36,3 +36,9 @@ are created using one of the functions named New_... located in the same file. A
 - [signal](signal/README.md), implements the different signal types
 - [simulate](simulate/README.md), implements the simulator which is used to simulate the ADC network.
 - [ssm](ssm/README.md), implements different state space model formulations
+
+
+## TODO
+- implement cotrol pre computations
+- implement adc general Interface
+- implement reconstruction steady state computator

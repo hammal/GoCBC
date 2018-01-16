@@ -26,7 +26,8 @@ func TestAnalogSwitchControl(t *testing.T) {
 	// Create state space Model
 	data := make([]float64, order)
 	data[0] = 1.
-	inp := signal.NewInput(func(arg1 float64) float64 { return 1 }, mat.NewVecDense(order, data))
+	inp := make([]signal.VectorFunction, 1)
+	inp[0] = signal.NewInput(func(arg1 float64) float64 { return 1 }, mat.NewVecDense(order, data))
 	stateSpaceModel := ssm.NewIntegratorChain(order, 10, inp)
 
 	control := NewAnalogSwitchControl(length, controls, ts, t0, nil, *stateSpaceModel)
@@ -38,7 +39,7 @@ func TestAnalogSwitchControl(t *testing.T) {
 
 	control.Simulate()
 
-	for index := 0; index < control.Length; index++ {
+	for index := 0; index < control.Length(); index++ {
 		for ctrl := 0; ctrl < control.NumberOfControls; ctrl++ {
 			fmt.Print(control.bits[index][ctrl])
 		}

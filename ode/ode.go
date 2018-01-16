@@ -14,8 +14,8 @@ type RungeKutta struct {
 	Description butcherTableau
 }
 
-// Compute the update for a Runge kutta system based on a current value at t = from
-// , a target time t = to, a intial value x(t=from) = value and a system model ode.
+// Compute the update for a Runge-Kutta system based on a current value at t = from
+// , a target time t = to, a initial value x(t=from) = value and a system model ode.
 // When algorithm is finished the result is copied into the value.
 func (rk RungeKutta) Compute(from, to float64, value *mat.VecDense, ode ssm.StateSpaceModel) {
 	// State order
@@ -43,7 +43,7 @@ func (rk RungeKutta) Compute(from, to float64, value *mat.VecDense, ode ssm.Stat
 	}
 }
 
-// NewRK4 function returns a forth order Runge Kutta object
+// NewRK4 function returns a forth order Runge-Kutta object
 func NewRK4() *RungeKutta {
 	var temp butcherTableau
 	temp.stages = 4
@@ -59,7 +59,7 @@ func NewRK4() *RungeKutta {
 	return &rk
 }
 
-// NewEulerMethod returns a pointer to a RungeKutta that does the Euler method.
+// NewEulerMethod returns a pointer to a Runge-Kutta that does the Euler method.
 func NewEulerMethod() *RungeKutta {
 	var temp butcherTableau
 	temp.stages = 1
