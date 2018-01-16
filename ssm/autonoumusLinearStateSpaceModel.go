@@ -44,3 +44,13 @@ func (model AutonomousLinearStateSpaceModel) StateDerivative(t float64, state *m
 
 	return state
 }
+
+func (ssm AutonomousLinearStateSpaceModel) StateSpaceOrder() int {
+	m, _ := ssm.A.Dims()
+	return m
+}
+
+func (ssm AutonomousLinearStateSpaceModel) ObservationSpaceOrder() int {
+	m, _ := ssm.C.Dims()
+	return m
+}

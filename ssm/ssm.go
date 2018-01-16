@@ -17,4 +17,8 @@ type StateSpaceModel interface {
 	StateDerivative(t float64, state *mat.VecDense) *mat.VecDense
 	// This is the observedState
 	StateObservation(t float64, state *mat.VecDense) *mat.VecDense
+	// Returns the state space order
+	StateSpaceOrder() int
+	// Returns the observation space order.
+	ObservationSpaceOrder() int
 }

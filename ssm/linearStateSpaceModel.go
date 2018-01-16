@@ -143,6 +143,16 @@ func (model LinearStateSpaceModel) ImpulseResponse(t []float64) [][][]float64 {
 	return res
 }
 
+func (ssm LinearStateSpaceModel) StateSpaceOrder() int {
+	m, _ := ssm.A.Dims()
+	return m
+}
+
+func (ssm LinearStateSpaceModel) ObservationSpaceOrder() int {
+	m, _ := ssm.C.Dims()
+	return m
+}
+
 // func (model LinearStateSpaceModel) FrequencyResponse(f []float64) [][][]complex128 {
 // 	numberOfTaps := len(f)
 // 	numberOfObservations := model.Order

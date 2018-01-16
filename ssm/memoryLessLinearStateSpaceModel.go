@@ -27,3 +27,13 @@ func (model MemoryLessLinearStateSpaceModel) StateObservation(t float64, state *
 	n, _ := model.C.Dims()
 	return mat.NewVecDense(n, nil)
 }
+
+func (ssm MemoryLessLinearStateSpaceModel) StateSpaceOrder() int {
+	m, _ := ssm.Input.B.Dims()
+	return m
+}
+
+func (ssm MemoryLessLinearStateSpaceModel) ObservationSpaceOrder() int {
+	m, _ := ssm.C.Dims()
+	return m
+}
