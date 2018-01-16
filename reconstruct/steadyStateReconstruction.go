@@ -78,8 +78,7 @@ func (rec steadyStateReconstruction) inputEstimation(fm []*mat.VecDense, bm []*m
 	var tmp mat.VecDense
 	for index, _ := range res {
 		res[index] = make([]float64, n)
-		// (mf + mb) Note  that mb is computed with negation
-		tmp.AddVec(fm[index], bm[index])
+		tmp.SubVec(fm[index], bm[index])
 		tmp.MulVec(&rec.W, &tmp)
 		for inp := 0; inp < n; inp++ {
 			res[index][inp] = tmp.AtVec(inp)
