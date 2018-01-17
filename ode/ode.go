@@ -52,7 +52,9 @@ func (rk RungeKutta) Compute(from, to float64, value *mat.VecDense, ode ssm.Stat
 	return err
 }
 
-// This adaptive Runge Kutta version implies an
+// This adaptive Runge-Kutta version implements an adaptive version which for a
+// given error tolerance err. Makes recursive steps such that the local error
+// never exceeds the error specification.
 func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value *mat.VecDense, ode ssm.StateSpaceModel) error {
 	var (
 		tmpState           *mat.VecDense
