@@ -9,6 +9,9 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+// steadyStateReconstruction holds a reconstruction struct that
+// solves the message passing based on the idea of that the associated
+// covariance matrices converge to a steady state.
 type steadyStateReconstruction struct {
 	// Forward steady state dynamics
 	Af mat.Dense
@@ -18,17 +21,19 @@ type steadyStateReconstruction struct {
 	W mat.Dense
 	// Control interface
 	control control.Control
-	// state space Model
-	stateSpaceModel *ssm.LinearStateSpaceModel
 }
 
+// Reconstruction returns the reconstructed estimates based on the associated
+// control interface.
+//
+// The returned data structure is [number of time indices][number of estimates]*float64
 func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 
 	// Sync group for go routines
 	var wg sync.WaitGroup
 
 	// Number of estimates to produce
-	n := rec.control.Length()
+	n := rec.control.GetLength()
 
 	// Initialize the state
 	forwardStates := make([]*mat.VecDense, n)
@@ -55,13 +60,11 @@ func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 	go rec.forwardMessagePassing(forwardStates, &wg, forwardReport)
 	go rec.backwardMessagePassing(backwardStates, &wg, backwardReport)
 
-	// Number of inputs to be estimated
-	numberOfInputs := rec.stateSpaceModel.InputSpaceOrder()
-
 	// Initialize result vector
 	res := make([][]*float64, n)
+	numberOfEstimates, _ := rec.W.Dims()
 	for index := range res {
-		res[index] = make([]*float64, numberOfInputs)
+		res[index] = make([]*float64, numberOfEstimates)
 	}
 
 	// Keep track of what stages have been computed and commence input estimations if possible
@@ -70,7 +73,7 @@ func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 	forwardComputedStates := make([]bool, n)
 	backwardComputedStates := make([]bool, n)
 
-	var remainingNumberOfEstimates int = n
+	var remainingNumberOfEstimates = n
 
 	// Add the number of go routines required to complete input estimation
 	wg.Add(remainingNumberOfEstimates)
@@ -88,7 +91,7 @@ func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 				// Reduce the number of remaining input estimate computations
 				remainingNumberOfEstimates--
 
-				fmt.Printf("Started an input estimation from %s for index %v\n", "forward", f)
+				fmt.Printf("Started ank input estimation from %s for index %v\n", "forward", f)
 			} else {
 				// Register that this state has been computed
 				forwardComputedStates[f] = true
@@ -117,6 +120,8 @@ func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 	return res
 }
 
+// forwardMessagePassing is a utility function that performs the forward message passing
+// and updates the res vector
 func (rec steadyStateReconstruction) forwardMessagePassing(res []*mat.VecDense, wait *sync.WaitGroup, report chan<- int) {
 	// upon completion tell wait group that you are done and close the report channel
 	defer close(report)
@@ -141,6 +146,8 @@ func (rec steadyStateReconstruction) forwardMessagePassing(res []*mat.VecDense, 
 	}
 }
 
+// backwardMessagePassing is a utility function that performs the backward message passing
+// and updates the corresponding res vector.
 func (rec steadyStateReconstruction) backwardMessagePassing(res []*mat.VecDense, wait *sync.WaitGroup, report chan<- int) {
 	// upon completion tell wait group that you are done and close the report channel
 	defer wait.Done()
@@ -166,6 +173,8 @@ func (rec steadyStateReconstruction) backwardMessagePassing(res []*mat.VecDense,
 	}
 }
 
+// inputEstimate is a utility function that performs the last merging input estimation
+// by combining a forward and backward message into estimate.
 func (rec steadyStateReconstruction) inputEstimate(res []*float64, fm, bm *mat.VecDense, sync *sync.WaitGroup) {
 	// Report when function is done
 	defer sync.Done()
@@ -186,4 +195,84 @@ func (rec steadyStateReconstruction) inputEstimate(res []*float64, fm, bm *mat.V
 		tmpRes = tmp.AtVec(inp)
 		res[inp] = &tmpRes
 	}
+}
+
+// NewSteadyStateReconstructor returns a Steady-state reconstructor based on the
+// control.
+func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovariance, inputNoiseCovariance mat.Matrix, linearStateSpaceModel ssm.LinearStateSpaceModel) *steadyStateReconstruction {
+	// This function needs to do the following
+	// - Compute steady state covariance matrices
+	// 	- Compute filter state dynamics, forward and backward.
+	// 		- Call controls PreComputeFilterContributions with state dynamics.
+	// 		- Compute the W
+	// 		- Compute the Af
+	// 		- Compute the Ab
+	//
+
+	// variables
+	var (
+		inverseMeasurementNoiseCovariance *mat.Dense
+		order                             int
+		ForwardStateDynamics              *mat.Dense
+		BackwardStateDynamics             *mat.Dense
+		tmpMatrix1                        *mat.Dense
+		tmpMatrix2                        *mat.Dense
+		W, Af, Ab                         *mat.Dense
+		rec                               steadyStateReconstruction
+	)
+
+	// Compute inverse measurement noise covariance
+	inverseMeasurementNoiseCovariance.Inverse(measurementNoiseCovariance)
+
+	// Solve forward and backward steady state covariance function
+	Vf := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
+	// TODO fix the right sign changes here!
+	Vb := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
+
+	// Compute state dynamics
+	// Forward: (A - Vf C Sigma_z^(-1) C^T )
+	// Backward: -(A + Vb C Sigma_z^(-1) C^T )
+	tmpMatrix2.Mul(inverseMeasurementNoiseCovariance, linearStateSpaceModel.C.T())
+	tmpMatrix1.Mul(linearStateSpaceModel.C, tmpMatrix2)
+	tmpMatrix2.Reset()
+	tmpMatrix2.Mul(Vf, tmpMatrix1)
+	ForwardStateDynamics.Sub(linearStateSpaceModel.A, tmpMatrix2)
+
+	tmpMatrix2.Reset()
+	tmpMatrix2.Mul(Vb, tmpMatrix1)
+	tmpMatrix2.Add(linearStateSpaceModel.A, tmpMatrix2)
+	BackwardStateDynamics.Scale(-1, tmpMatrix2)
+
+	// Let control initialize the filter contributions
+	cont.PreComputeFilterContributions(ForwardStateDynamics, BackwardStateDynamics)
+
+	// Compute input estimate weights
+	tmpMatrix1.Reset()
+	tmpMatrix1.Add(Vf, Vb)
+
+	tmpMatrix2.Reset()
+	order, _ = linearStateSpaceModel.A.Dims()
+	tmpMatrix2.Grow(order, len(linearStateSpaceModel.Input))
+	for index, input := range linearStateSpaceModel.Input {
+		tmpMatrix2.SetCol(index, input.B.RawVector().Data)
+	}
+	W.Solve(tmpMatrix1, tmpMatrix2)
+
+	// Compute Af
+	Af.Scale(cont.GetTs(), ForwardStateDynamics)
+	Af.Exp(Af)
+
+	// Compute Bf
+	Ab.Scale(cont.GetTs(), BackwardStateDynamics)
+	Ab.Exp(Ab)
+
+	// Initialize steady state reconstruction instance
+	rec = steadyStateReconstruction{
+		*Af,
+		*Ab,
+		*W,
+		cont,
+	}
+
+	return &rec
 }

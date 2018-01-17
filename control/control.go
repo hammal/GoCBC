@@ -7,8 +7,8 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-// Control interface holds the Control instance which is capeable of simulating
-// the system as well as providing the netto controls at a given index.
+// Control interface holds the Control instance which is capable of simulating
+// the system as well as providing the filter contributions of the controls at a given index.
 type Control interface {
 	// Executes the control simulation and return the observations
 	Simulate() [][]float64
@@ -17,10 +17,12 @@ type Control interface {
 	// Get the control contribution for filtering at index
 	GetForwardControlFilterContribution(index int) []mat.Vector
 	GetBackwardControlFilterContribution(index int) []mat.Vector
-	// Precompute filter descisions
-	PreComputeFilterContributions(eta2 []float64, Vf mat.Vector, Vb mat.Vector)
+	// Precompute filter decisions based on filter dynamics
+	PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix)
 	// Length of control
-	Length() int
+	GetLength() int
+	// get the sample period
+	GetTs() float64
 }
 
 // zeroOrderHold solves the problem
@@ -45,7 +47,7 @@ func zeroOrderHold(A *mat.Dense, t float64) mat.Matrix {
 		// Assign temporary state space model and initial state vector
 		tempSSM := ssm.NewLinearStateSpaceModel(A, A, input)
 		tempState := mat.NewVecDense(M, nil)
-		// Solve initial value problem using adaptive Runge-Kutta method.
+		// Solve initial value problem using adaptive Runge-Kutta Fehlberg4(5) method.
 		od := ode.NewFehlberg45()
 		od.AdaptiveCompute(0., t, err, tempState, tempSSM)
 

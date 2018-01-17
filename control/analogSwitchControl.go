@@ -9,8 +9,8 @@ import (
 )
 
 // Returns an initialized analog switch control
-func NewAnalogSwitchControl(length int, controls []*mat.VecDense, ts, t0 float64, state *mat.VecDense, stateSpaceModel ssm.LinearStateSpaceModel) *analogSwitchControl {
-	order := stateSpaceModel.StateSpaceOrder()
+func NewAnalogSwitchControl(length int, controls []*mat.VecDense, ts, t0 float64, state *mat.VecDense, StateSpaceModel ssm.LinearStateSpaceModel) *AnalogSwitchControl {
+	order := StateSpaceModel.StateSpaceOrder()
 	numberOfControls := len(controls)
 
 	// If state is an nil pointer initialize a new zero vector.
@@ -27,7 +27,7 @@ func NewAnalogSwitchControl(length int, controls []*mat.VecDense, ts, t0 float64
 	// Decision Simulation Lookup table
 	// var tmp0, tmp1 *mat.VecDense
 	// Compute e^(A Ts)
-	Ad := zeroOrderHold(stateSpaceModel.A, ts)
+	Ad := zeroOrderHold(StateSpaceModel.A, ts)
 
 	// Create decision Simulation lookup table
 	controlSimulateLookUp := make([][]mat.VecDense, numberOfControls)
@@ -52,21 +52,21 @@ func NewAnalogSwitchControl(length int, controls []*mat.VecDense, ts, t0 float64
 		controlFilterLookUp[index] = make([]mat.VecDense, 2)
 	}
 
-	return &analogSwitchControl{
+	return &AnalogSwitchControl{
 		numberOfControls,
 		ts,
 		t0,
 		bits,
 		state,
-		stateSpaceModel,
+		StateSpaceModel,
 		controlSimulateLookUp,
 		controlFilterLookUp,
 	}
 }
 
-// analogSwitchControl is the implementation of control with
+// AnalogSwitchControl is the implementation of control with
 // open analog switches.
-type analogSwitchControl struct {
+type AnalogSwitchControl struct {
 	// Number of controls
 	NumberOfControls int
 	// Sampling period
@@ -78,7 +78,7 @@ type analogSwitchControl struct {
 	// Initial state
 	state *mat.VecDense
 	// State space model
-	stateSpaceModel ssm.StateSpaceModel
+	StateSpaceModel ssm.StateSpaceModel
 	// precomputed control descision vectors for simulation
 	controlSimulateLookUp [][]mat.VecDense
 	// precomputed control descision vectors for filtering
@@ -86,12 +86,12 @@ type analogSwitchControl struct {
 }
 
 // Simulate the simulation tool for integratorControl
-func (c *analogSwitchControl) Simulate() {
+func (c *AnalogSwitchControl) Simulate() {
 	t0 := c.T0
 	t1 := t0 + c.Ts
 	rk := ode.NewRK4()
 	var tmpCtrl []*mat.VecDense
-	for index := 0; index < c.Length(); index++ {
+	for index := 0; index < c.GetLength(); index++ {
 		// Update control based on current state
 		c.updateControl(index)
 		// Simulate the ADC without control
@@ -99,7 +99,7 @@ func (c *analogSwitchControl) Simulate() {
 		// if the state space model was a linear model. Thus this could be realized
 		// using a pre-computed Ad=e^(A Ts) and then using the Runge-Kutta method
 		// with zero initial state.
-		rk.Compute(t0, t1, c.state, c.stateSpaceModel)
+		rk.Compute(t0, t1, c.state, c.StateSpaceModel)
 		// Get the control contributions
 		tmpCtrl = c.getControlSimulationContribution(index)
 		// Add the control contributions
@@ -114,7 +114,7 @@ func (c *analogSwitchControl) Simulate() {
 
 // updateControl computes the control decisions for index based on the current
 // state, held in the reviver type.
-func (c *analogSwitchControl) updateControl(index int) {
+func (c *AnalogSwitchControl) updateControl(index int) {
 	// Set control bits
 	var tmp bool
 	for i := 0; i < c.NumberOfControls; i++ {
@@ -130,9 +130,9 @@ func (c *analogSwitchControl) updateControl(index int) {
 
 // GetControlSimulationContribution returns the control decision vector
 // for simulation.
-func (c *analogSwitchControl) getControlSimulationContribution(index int) []*mat.VecDense {
+func (c *AnalogSwitchControl) getControlSimulationContribution(index int) []*mat.VecDense {
 	// Check that index exists
-	if index < 0 || index > c.Length()-1 {
+	if index < 0 || index > c.GetLength()-1 {
 		panic(errors.New("Index out of range"))
 	}
 
@@ -149,9 +149,9 @@ func (c *analogSwitchControl) getControlSimulationContribution(index int) []*mat
 
 // GetControlFilterContribution returns the control decision vector
 // for simulation.
-func (c *analogSwitchControl) GetControlFilterContribution(index int) ([]*mat.VecDense, error) {
+func (c *AnalogSwitchControl) GetControlFilterContribution(index int) ([]*mat.VecDense, error) {
 	// Check that index exists
-	if index < 0 || index > c.Length()-1 {
+	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("index out of range")
 	}
 	// Check that there are precomputed filter decisions
@@ -170,6 +170,27 @@ func (c *analogSwitchControl) GetControlFilterContribution(index int) ([]*mat.Ve
 	return tmp, nil
 }
 
-func (c analogSwitchControl) Length() int {
+// GetLength returns the length of control (number of time samples)
+func (c AnalogSwitchControl) GetLength() int {
 	return len(c.bits)
+}
+
+// GetTs returns the sample period
+func (c AnalogSwitchControl) GetTs() float64 { return c.Ts }
+
+func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) []mat.Vector {
+	// TODO
+	panic("Not yet implemented")
+	return nil
+}
+
+func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) []mat.Vector {
+	// TODO
+	panic("Not yet implemented")
+	return nil
+}
+
+func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix) {
+	// TODO
+	panic("Not yet implementd")
 }
