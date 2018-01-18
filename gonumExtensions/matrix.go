@@ -30,6 +30,15 @@ func Eye(m, n, k int) mat.Matrix {
 		}
 		return mat.NewDiagonalRect(m, n, data)
 	}
+	tmp := mat.NewDense(m, n, nil)
+	for row := 0; row < m; row++ {
+		for column := 0; column < n; column++ {
+			if column == (row + k) {
+				tmp.Set(row, column+k, 1)
+			}
+		}
+	}
+	return tmp
 	panic("Not yet implemented")
 }
 
