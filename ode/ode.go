@@ -52,7 +52,7 @@ func (rk RungeKutta) Compute(from, to float64, value *mat.VecDense, ode ssm.Stat
 	return err
 }
 
-// This adaptive Runge-Kutta version implements an adaptive version which for a
+// AdaptiveCompute implements an adaptive version which for a
 // given error tolerance err. Makes recursive steps such that the local error
 // never exceeds the error specification.
 func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value *mat.VecDense, ode ssm.StateSpaceModel) error {
@@ -97,9 +97,9 @@ func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value *mat.VecDense,
 			tnext = (tnext-tnow)/2. + tnow
 
 			// Increment counter and check if we are allowed more trials
-			count += 1
+			count++
 			if count >= maxNumberOfIterations {
-				return errors.New("Max number of iterations reached adaptive Runge-Kutta doesn't converge.")
+				return errors.New("Maximum number of iterations reached adaptive Runge-Kutta doesn't converge")
 			}
 		}
 		// Save this state and update tnow
