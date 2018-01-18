@@ -4,18 +4,29 @@ many of which are inspired from the [Numpy](http://www.numpy.org) python package
 
 #### Matrix creating routines
 Routines used for easily creating matrices
-###### TODO: Eye
+###### Eye
 [Numpy Eye Interface](https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.eye.html)
+TODO: The k shift property is not implemented yet
 
-###### TODO: Ones
+###### Ones
 [Numpy Ones Interface](https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.ones.html
-###### TODO: Full
+###### Full
 [Numpy Full Interface](https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.full.html#numpy.full)
 
 #### Matrix Vector Conversion
 These are matrix vector conversion tools
-###### TODO: MatColToVec
+This is redundant see the mat.VecDense receiver functions
+- ColViewOf
+- RowViewOf
 
-###### TODO: MatRowToVec
+And since the Vector interface includes the matrix one
+also VecToMat is redundant as it is an matrix already.
 
-###### TODO: VecToMat
+###### ~~MatColToVec~~
+
+###### ~~MatRowToVec~~
+
+###### ~~VecToMat~~
+
+#### Matrix checks norm etc
+###### check if INF or NAN
