@@ -218,6 +218,7 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 		tmpMatrix1                        *mat.Dense
 		tmpMatrix2                        *mat.Dense
 		W, Af, Ab                         *mat.Dense
+		Vf, Vb                            *mat.Dense
 		rec                               steadyStateReconstruction
 	)
 
@@ -225,9 +226,9 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 	inverseMeasurementNoiseCovariance.Inverse(measurementNoiseCovariance)
 
 	// Solve forward and backward steady state covariance function
-	Vf := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
+	// Vf := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
 	// TODO fix the right sign changes here!
-	Vb := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
+	// Vb := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
 
 	// Compute state dynamics
 	// Forward: (A - Vf C Sigma_z^(-1) C^T )
