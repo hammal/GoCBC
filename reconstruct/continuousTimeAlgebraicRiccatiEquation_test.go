@@ -31,6 +31,6 @@ func TestCare(t *testing.T) {
 	for index := 0; index < N; index++ {
 		Vf.Set(index, index, 1.)
 	}
-	care(stateSpaceModel.A, stateSpaceModel.C, Rinv, Q, Vf, Recursion{1e-12})
+	care(stateSpaceModel.A, stateSpaceModel.C, Rinv, Q, Vf, Recursion{1e-9, 1e-5})
 	fmt.Println(mat.Formatted(Vf))
 }

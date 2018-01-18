@@ -2,13 +2,13 @@ package reconstruct
 
 import (
 	"fmt"
-	"math"
 
 	"gonum.org/v1/gonum/mat"
 )
 
 type Recursion struct {
-	precision float64
+	precision  float64
+	stepLength float64
 }
 
 type EigenDecomposition struct{}
@@ -27,7 +27,7 @@ func care(A, B, Rinv, Q, X mat.Matrix, method interface{}) {
 			tmp2     mat.Dense
 		)
 		// A^T X
-		Jacobian.Mul(A.T(), X)
+		Jacobian.Mul(A.T(), X.T())
 
 		// X A
 		tmp1.Mul(X, A)
@@ -40,17 +40,18 @@ func care(A, B, Rinv, Q, X mat.Matrix, method interface{}) {
 		tmp1.Mul(X, &tmp1)
 		Jacobian.Sub(&Jacobian, &tmp1)
 
-		fmt.Println(mat.Formatted(&Jacobian))
-
 		// Q
 		Jacobian.Add(&Jacobian, Q)
+
+		// Scale with step length
+		Jacobian.Scale(met.stepLength, &Jacobian)
 
 		// Add the Jacobian to the current estimate
 		xtmp := X.(*mat.Dense)
 		xtmp.Add(xtmp, &Jacobian)
 
 		// Check if derivative has converged
-		if math.Abs(mat.Det(&Jacobian)) > met.precision || math.Abs(mat.Trace(&Jacobian)) > met.precision {
+		if mat.Norm(&Jacobian, 2) > met.precision {
 			// If not free memory
 			Jacobian.Reset()
 			tmp1.Reset()
@@ -121,7 +122,10 @@ func care(A, B, Rinv, Q, X mat.Matrix, method interface{}) {
 		tmpX.Solve(tmp1.Slice(0, n, 0, n), tmp1.Slice(n, 2*n, 0, n))
 
 	default:
-		meth := Recursion{1e-9}
+		meth := Recursion{
+			stepLength: 1e-3,
+			precision:  1e-12,
+		}
 		care(A, B, Rinv, Q, X, meth)
 	}
 }
