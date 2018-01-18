@@ -6,26 +6,26 @@ import (
 
 // care Computes the continuous algebraic Riccati equation as shown in [Optimal Solution to Matrix Riccati Equation – For Kalman Filter Implementation](http://cdn.intechopen.com/pdfs/39345/intech-optimal_solution_to_matrix_riccati_equation_for_kalman_filter_implementation.pdf).
 //
-// X' = AX + XA^H - X B^H Rinv B X + Q
+// X' = A^TX + XA - X B^H Rinv B X + Q
 //
 // TODO: This care does not work properly!
 func care(A, B, Rinv, Q mat.Matrix) mat.Matrix {
 	n, _ := A.Dims()
 	n2, _ := Rinv.Dims()
-	Am := mat.NewDense(n, n, nil)
 	tmp0 := mat.NewDense(n, n2, nil)
 	tmp00 := mat.NewDense(n, n, nil)
 	tmp1 := mat.NewDense(n, 2*n, nil)
 	tmp2 := mat.NewDense(n, 2*n, nil)
 	psi := mat.NewDense(2*n, 2*n, nil)
 	// tmp1 = [A Q]
-	tmp1.Augment(A, Q)
+	tmp1.Augment(A.T(), Q)
+	tmp1.Scale(-1, tmp1)
 	// tmp0 = B^HR^{-1}B
 	tmp0.Mul(B.T(), Rinv)
 	tmp00.Mul(tmp0, B)
-	Am.Scale(-1, A)
+	tmp00.Scale(-1, tmp00)
 	// tmp2 = [B^HR^{-1}B -A]
-	tmp2.Augment(tmp00, Am)
+	tmp2.Augment(tmp00, A)
 	// psi = [A, Q; B^HR^{-1}B -A]
 	psi.Stack(tmp1, tmp2)
 
@@ -38,7 +38,7 @@ func care(A, B, Rinv, Q mat.Matrix) mat.Matrix {
 
 	// Compute solution for some large time constant t
 	// psi = e^(psi t)
-	t := 1e2
+	t := 1e1
 	psi.Scale(t, psi)
 	psi.Exp(psi)
 	// fmt.Printf("%v\n%v\n%v\n", mat.Formatted(tmp0), mat.Formatted(psi), mat.Formatted(tmp1))

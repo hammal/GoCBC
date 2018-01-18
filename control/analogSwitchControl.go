@@ -179,18 +179,18 @@ func (c AnalogSwitchControl) GetLength() int {
 func (c AnalogSwitchControl) GetTs() float64 { return c.Ts }
 
 func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) []mat.Vector {
-	// TODO
+	// TODO implement please!
 	panic("Not yet implemented")
 	return nil
 }
 
 func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) []mat.Vector {
-	// TODO
+	// TODO implement please!
 	panic("Not yet implemented")
 	return nil
 }
 
 func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix) {
-	// TODO
+	// TODO implement please!
 	panic("Not yet implementd")
 }
