@@ -6,7 +6,6 @@ many of which are inspired from the [Numpy](http://www.numpy.org) python package
 Routines used for easily creating matrices
 ###### Eye
 [Numpy Eye Interface](https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.eye.html)
-TODO: The k shift property is not implemented yet
 
 ###### Ones
 [Numpy Ones Interface](https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.ones.html

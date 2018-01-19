@@ -38,9 +38,9 @@ are created using one of the functions named New_... located in the same file. A
 - [ssm](ssm/README.md), implements different state space model formulations
 
 
-## TODO
-- implement cotrol pre computations
-- implement adc general Interface
-- implement reconstruction steady state computator
-- Check out [Cobra](https://github.com/spf13/cobra) for command line flags 
-- Check out [Viper](https://github.com/spf13/viper) for configuration files
+## Notes
+- TODO: implement control pre computations
+- TODO: implement adc general Interface
+- ~~implement reconstruction steady state computator~~
+- IDEA: Check out [Cobra](https://github.com/spf13/cobra) for command line flags
+- IDEA: Check out [Viper](https://github.com/spf13/viper) for configuration files

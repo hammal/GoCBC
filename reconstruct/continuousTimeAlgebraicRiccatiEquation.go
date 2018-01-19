@@ -11,13 +11,13 @@ type Recursion struct {
 	stepLength float64
 }
 
+// TODO: Need to implement a faster way of computing steady states... This would be a good method to start with.
 type EigenDecomposition struct{}
 
 // care Computes the continuous algebraic Riccati equation as shown in [Optimal Solution to Matrix Riccati Equation – For Kalman Filter Implementation](http://cdn.intechopen.com/pdfs/39345/intech-optimal_solution_to_matrix_riccati_equation_for_kalman_filter_implementation.pdf).
 //
 // X' = A^TX + XA - X B^H Rinv B X + Q
 //
-// TODO: This care does not work properly!
 func care(A, B, Rinv, Q, X mat.Matrix, method interface{}) {
 	switch met := method.(type) {
 	case Recursion:

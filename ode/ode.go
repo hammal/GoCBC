@@ -223,8 +223,6 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 	return nil
 }
 
-// TODO: Implement Compute and Adaptive Compute for Matrices of states
-
 // NewRK4 function returns a forth order Runge-Kutta object
 func NewRK4() *RungeKutta {
 	var temp butcherTableau
