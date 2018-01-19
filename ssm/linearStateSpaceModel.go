@@ -44,7 +44,7 @@ func NewIntegratorChain(N int, stageGain float64, input []signal.VectorFunction)
 }
 
 // NewLinearStateSpaceModel creates a new Linear state space model
-func NewLinearStateSpaceModel(A, C *mat.Dense, input []signal.VectorFunction) *LinearStateSpaceModel {
+func NewLinearStateSpaceModel(A, C mat.Matrix, input []signal.VectorFunction) *LinearStateSpaceModel {
 	// Check that system parameters match
 	m, n := A.Dims()
 	_, nC := C.Dims()

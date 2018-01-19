@@ -1,6 +1,8 @@
 package control
 
 import (
+	"fmt"
+
 	"github.com/hammal/adc/ode"
 	"github.com/hammal/adc/signal"
 	"github.com/hammal/adc/ssm"
@@ -29,14 +31,17 @@ type Control interface {
 // int_0^T_s e^(A(T_s - t)) dt
 // by solving the initial value problem
 // x'(t) = A x(t) + B
-func zeroOrderHold(A *mat.Dense, t float64) mat.Matrix {
+func zeroOrderHold(A mat.Matrix, t float64) mat.Matrix {
 	// Determine allowed error
 	const err float64 = 1e-9
+
+	fmt.Println(mat.Formatted(A))
 
 	// Define variables
 	M, _ := A.Dims()
 	res := mat.NewDense(M, M, nil)
 	input := make([]signal.VectorFunction, 1)
+	od := ode.NewFehlberg45()
 
 	// For each possible unity input
 	for column := 0; column < M; column++ {
@@ -46,14 +51,17 @@ func zeroOrderHold(A *mat.Dense, t float64) mat.Matrix {
 		input[0] = signal.NewInput(func(arg1 float64) float64 { return 1. }, tmp)
 		// Assign temporary state space model and initial state vector
 		tempSSM := ssm.NewLinearStateSpaceModel(A, A, input)
-		tempState := mat.NewVecDense(M, nil)
+		tempState := mat.NewDense(M, 1, nil)
 		// Solve initial value problem using adaptive Runge-Kutta Fehlberg4(5) method.
-		od := ode.NewFehlberg45()
-		od.AdaptiveCompute(0., t, err, tempState, tempSSM)
+		// od.AdaptiveCompute(0., t, err, tempState, tempSSM)
+		od.Compute(0., t, tempState, tempSSM)
+
+		fmt.Println(mat.Formatted(tempState))
+		fmt.Println(M)
 
 		// Fill up result matrix for given unit vector.
 		for row := 0; row < M; row++ {
-			res.Set(row, column, tempState.AtVec(row))
+			res.Set(row, column, tempState.At(row, 0))
 		}
 	}
 	return res

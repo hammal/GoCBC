@@ -17,7 +17,7 @@ func TestAnalogSwitchControl(t *testing.T) {
 	t0 := 0.
 
 	// Create controls
-	controls := make([]*mat.VecDense, 4)
+	controls := make([]mat.Vector, 4)
 	for index, _ := range controls {
 		tmp := mat.NewVecDense(order, nil)
 		tmp.SetVec(index, 6250.)
@@ -34,8 +34,8 @@ func TestAnalogSwitchControl(t *testing.T) {
 	control := NewAnalogSwitchControl(length, controls, ts, t0, nil, *stateSpaceModel)
 
 	for index := 0; index < control.NumberOfControls; index++ {
-		fmt.Println(mat.Formatted(&control.controlSimulateLookUp[index][0]))
-		fmt.Println(mat.Formatted(&control.controlSimulateLookUp[index][1]))
+		fmt.Println(mat.Formatted(control.controlSimulateLookUp[index][0]))
+		fmt.Println(mat.Formatted(control.controlSimulateLookUp[index][1]))
 	}
 
 	control.Simulate()

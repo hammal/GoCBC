@@ -6,6 +6,7 @@ package ode
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 
@@ -39,6 +40,7 @@ func (rk RungeKutta) Compute(from, to float64, value mat.Matrix, system Differen
 
 		go func(column int, err []mat.Vector, from, to float64, res []mat.Vector, system DifferentiableSystem, wg *sync.WaitGroup) {
 			err[column] = rk.computeVec(from, to, res[column], system, wg)
+			fmt.Printf("Subroutine %v \n res = \n%v\n", column, mat.Formatted(res[column]))
 		}(column, err, from, to, res, system, &wg)
 	}
 
@@ -62,7 +64,7 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 	defer sync.Done()
 	// Variables
 	var (
-		tempV mat.VecDense
+		tempV *mat.VecDense
 	)
 
 	// State order
@@ -74,12 +76,12 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 	for index := range K {
 		switch sys := system.(type) {
 		case *ssm.LinearStateSpaceModel:
-			tempV = *mat.NewVecDense(M, nil)
+			tempV = mat.NewVecDense(M, nil)
 			for _, inp := range sys.Input {
-				tempV.AddVec(&tempV, inp.Value(from+h*rk.Description.nodes[index]))
+				tempV.AddVec(tempV, inp.Value(from+h*rk.Description.nodes[index]))
 			}
-
-			K[index] = &tempV
+			// fmt.Println(mat.Formatted(tempV))
+			K[index] = tempV
 		default:
 			// Initialize an intermediate vector
 			// tempV := mat.NewVecDense(M, nil)
@@ -87,16 +89,18 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 			// Compute the relevant vector by combining previously computed derivate points
 			// according to Butcher Tableau.
 			for index2, a := range rk.Description.rungeKuttaMatrix[index] {
-				tempV.AddScaledVec(&tempV, h*a, K[index2])
+				tempV.AddScaledVec(tempV, h*a, K[index2])
 			}
 			// Insert the new derivate point
 			// These can be implemented differently depending on underlying model
-			K[index] = system.Derivative(from+h*rk.Description.nodes[index], &tempV)
+			K[index] = system.Derivative(from+h*rk.Description.nodes[index], tempV)
 		}
 
 	}
+
 	switch sys := system.(type) {
 	case *ssm.LinearStateSpaceModel:
+		tempV.Reset()
 		// compute e^(AT_s) and move state forward
 		var tmpMatrix mat.Dense
 		tmpMatrix.Scale(to-from, sys.A)
@@ -111,14 +115,17 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 	err := mat.NewVecDense(M, nil)
 	// Sum up the different contributions with relevant weights.
 	for index, k := range K {
-		tempV.AddScaledVec(&tempV, h*rk.Description.weights[0][index], k)
+		tempV.AddScaledVec(tempV, h*rk.Description.weights[0][index], k)
 		// If the Butcher Tableau allows for adaptive error computation
 		if len(rk.Description.weights) == 2 {
 			err.AddScaledVec(err, h*(rk.Description.weights[1][index]-rk.Description.weights[0][index]), k)
 		}
 	}
 
-	value = &tempV
+	value = tempV
+
+	fmt.Printf("Result from computeVec\n%v\n", value)
+
 	return err
 }
 
@@ -214,6 +221,8 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 		}
 		// Save this state and update tnow
 		tmpState1.CopyVec(tmpState2)
+		fmt.Println("This happend")
+		fmt.Println(mat.Formatted(tmpState2))
 		tnow = tnext
 
 	}
