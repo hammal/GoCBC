@@ -7,58 +7,121 @@ package ode
 import (
 	"errors"
 	"math"
+	"sync"
 
 	"github.com/hammal/adc/ssm"
 	"gonum.org/v1/gonum/mat"
 )
+
+type DifferentiableSystem interface {
+	Derivative(t float64, state mat.Vector) mat.Vector
+}
 
 // RungeKutta holds the butcherTableau which describes the Runge Kutta method.
 type RungeKutta struct {
 	Description butcherTableau
 }
 
-// Compute the update for a Runge-Kutta system based on a current value at t = from
+func (rk RungeKutta) Compute(from, to, float64, value mat.Matrix, system DifferentiableSystem) mat.Matrix {
+	M, N := value.Dims()
+
+	res := make([]*mat.VecDense, N)
+
+	var wg sync.WaitGroup
+	wg.Add(N)
+
+	for column := 0; column < N; column++ {
+		res[column] = mat.NewVecDense(M, nil)
+		v := value.(*mat.Dense)
+		res[column] = v.ColView(column)
+		go rk.computeVec(from, to, res[column], system, &wg)
+	}
+
+	wg.Wait()
+
+	resMatrix := mat.NewDense(M, N, nil)
+	for column := 0; column < N; column++ {
+		resMatrix.SetCol(column, res[column].RawVector().Data)
+	}
+
+	return resMatrix
+}
+
+// computeVec the update for a Runge-Kutta system based on a current value at t = from
 // , a target time t = to, a initial value x(t=from) = value and a system model ode.
 // When algorithm is finished the result is copied into the value.
-func (rk RungeKutta) Compute(from, to float64, value *mat.VecDense, ode ssm.StateSpaceModel) *mat.VecDense {
+func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system DifferentiableSystem, sync *sync.WaitGroup) mat.Vector {
+	defer sync.Done()
+	// Variables
+	var (
+		tempV mat.VecDense
+	)
+
 	// State order
 	M, _ := value.Dims()
 	// The precomputed derivative points
-	K := make([]*mat.VecDense, rk.Description.stages)
+	K := make([]mat.Vector, rk.Description.stages)
 	// Step length
 	h := to - from
 	for index := range K {
-		// Initialize an intermediate vector
-		tempV := mat.NewVecDense(M, nil)
-		tempV.CopyVec(value)
-		// Compute the relevant vector by combining previously computed derivate points
-		// according to Butcher Tableau.
-		for index2, a := range rk.Description.rungeKuttaMatrix[index] {
-			tempV.AddScaledVec(tempV, h*a, K[index2])
+		switch sys := system.(type) {
+		case *ssm.LinearStateSpaceModel:
+			tempV = *mat.NewVecDense(M, nil)
+			for _, inp := range sys.Input {
+				tempV.AddVec(&tempV, inp.Value(from+h*rk.Description.nodes[index]))
+			}
+
+			K[index] = &tempV
+		default:
+			// Initialize an intermediate vector
+			// tempV := mat.NewVecDense(M, nil)
+			tempV.CloneVec(value)
+			// Compute the relevant vector by combining previously computed derivate points
+			// according to Butcher Tableau.
+			for index2, a := range rk.Description.rungeKuttaMatrix[index] {
+				tempV.AddScaledVec(&tempV, h*a, K[index2])
+			}
+			// Insert the new derivate point
+			// These can be implemented differently depending on underlying model
+			K[index] = system.Derivative(from+h*rk.Description.nodes[index], &tempV)
 		}
-		// Insert the new derivate point
-		K[index] = ode.StateDerivative(from+h*rk.Description.nodes[index], tempV)
+
 	}
+	switch sys := system.(type) {
+	case *ssm.LinearStateSpaceModel:
+		// compute e^(AT_s) and move state forward
+		var tmpMatrix mat.Dense
+		tmpMatrix.Scale(to-from, sys.A)
+		tmpMatrix.Exp(&tmpMatrix)
+		tempV.MulVec(&tmpMatrix, value)
+	default:
+		// Reset tempV
+		tempV.CloneVec(value)
+	}
+
 	// Initialize the error vector
 	err := mat.NewVecDense(M, nil)
 	// Sum up the different contributions with relevant weights.
 	for index, k := range K {
-		value.AddScaledVec(value, h*rk.Description.weights[0][index], k)
+		tempV.AddScaledVec(&tempV, h*rk.Description.weights[0][index], k)
 		// If the Butcher Tableau allows for adaptive error computation
 		if len(rk.Description.weights) == 2 {
 			err.AddScaledVec(err, h*(rk.Description.weights[1][index]-rk.Description.weights[0][index]), k)
 		}
 	}
+
+	value = &tempV
 	return err
 }
 
 // AdaptiveCompute implements an adaptive version which for a
 // given error tolerance err. Makes recursive steps such that the local error
 // never exceeds the error specification.
-func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value *mat.VecDense, ode ssm.StateSpaceModel) error {
+func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value mat.Vector, system DifferentiableSystem) error {
 	var (
-		tmpState           *mat.VecDense
-		currentErrorVector *mat.VecDense
+		tmpState1          *mat.VecDense
+		tmpState2          *mat.VecDense
+		currentErrorVector mat.Vector
 		currentError       float64
 		tnow, tnext        float64
 		count              int
@@ -69,8 +132,10 @@ func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value *mat.VecDense,
 	// Initialize current time
 	tnow = from
 
-	M, _ := value.Dims()
-	tmpState = mat.NewVecDense(M, nil)
+	M := value.Len()
+	tmpState1 = mat.NewVecDense(M, nil)
+	tmpState2 = mat.NewVecDense(M, nil)
+	tmpState1.CloneVec(value)
 
 	// Repeat until time to is reached
 	for tnow < to {
@@ -79,13 +144,13 @@ func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value *mat.VecDense,
 		// Repeat until target error is reached
 		for true {
 			// Copy the current state into tmpState
-			tmpState.CopyVec(value)
+			tmpState2.CopyVec(tmpState1)
 			// Execute the Runge Kutta computation
-			currentErrorVector = rk.Compute(tnow, tnext, tmpState, ode)
+			currentErrorVector = rk.Compute(tnow, tnext, tmpState2, system)
 			// Reset and compute Error
 			currentError = 0.
 			// count = 0
-			for index := 0; index < tmpState.Len(); index++ {
+			for index := 0; index < tmpState2.Len(); index++ {
 				currentError += math.Abs(currentErrorVector.AtVec(index))
 			}
 			// Has the target error been achived?
@@ -103,10 +168,12 @@ func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value *mat.VecDense,
 			}
 		}
 		// Save this state and update tnow
-		value.CopyVec(tmpState)
+		tmpState1.CopyVec(tmpState2)
 		tnow = tnext
 
 	}
+	value = tmpState1
+
 	// Successful integration!  Return nil error
 	return nil
 }

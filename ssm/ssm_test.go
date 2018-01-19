@@ -43,11 +43,11 @@ func TestStateSpaceModel(t *testing.T) {
 	stateSpaceModel := NewLinearStateSpaceModel(A, C, inputs)
 	state := mat.NewVecDense(3, nil)
 	for i := 0; i < 100; i++ {
-		sD := stateSpaceModel.StateDerivative(float64(i), state)
+		sD := stateSpaceModel.Derivative(float64(i), state)
 		state.AddVec(sD, state)
-		sO := stateSpaceModel.StateObservation(float64(i), state)
+		sO := stateSpaceModel.Observation(float64(i), state)
 		// sO := 5
-		fmt.Printf("State = %v\n, for time %v\nStateDerivative = %v\nStateObservation = %v\n", mat.Formatted(state, mat.Prefix("        ")), i, mat.Formatted(sD, mat.Prefix("                  ")), mat.Formatted(sO))
+		fmt.Printf("State = %v\n, for time %v\nDerivative = %v\nObservation = %v\n", mat.Formatted(state, mat.Prefix("        ")), i, mat.Formatted(sD, mat.Prefix("                  ")), mat.Formatted(sO))
 	}
 }
 

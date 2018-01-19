@@ -1,8 +1,6 @@
 package signal
 
 import (
-	"math"
-
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -15,19 +13,19 @@ import (
 // DU(t) as with BU(t) is the vectorial function decomposition for the state Observation.
 type VectorFunction struct {
 	U func(float64) float64
-	B *mat.VecDense
+	B mat.Vector
 }
 
 // Bu is an alias in the state space model:
 //
 // Ax + Bu(t)
 // where Bu(t) is a vectorial function
-func (vf VectorFunction) Bu(t float64) *mat.VecDense {
+func (vf VectorFunction) Bu(t float64) mat.Vector {
 	return vf.Value(t)
 }
 
 // Value returns the vectorial function value
-func (vf VectorFunction) Value(t float64) *mat.VecDense {
+func (vf VectorFunction) Value(t float64) mat.Vector {
 	var res mat.VecDense
 	res.CloneVec(vf.B)
 	res.ScaleVec(vf.U(t), &res)
@@ -46,15 +44,4 @@ func (vf VectorFunction) Value(t float64) *mat.VecDense {
 // initalised with u(t) and B
 func NewInput(u func(float64) float64, B *mat.VecDense) VectorFunction {
 	return VectorFunction{u, B}
-}
-
-// DiracDelta is a dirac delta distrubution as defined in
-// https://en.wikipedia.org/wiki/Dirac_delta_function
-func DiracDelta(x float64) float64 {
-	// These could all be done offline
-	var a = 1e-9
-	var a2 = a * a
-	var C1 = 1. / (math.Abs(a) * math.Sqrt(math.Pi))
-	// Return distribution value at x
-	return C1 * math.Exp(-x*x/a2)
 }

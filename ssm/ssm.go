@@ -14,9 +14,9 @@ import (
 // 3) Similarly the frequencyResponse H(f) evaluated at f(0)...f(N-1)
 type StateSpaceModel interface {
 	// This is the derivative of a state space mordinaryDifferentialEquationl
-	StateDerivative(t float64, state *mat.VecDense) *mat.VecDense
+	Derivative(t float64, state mat.Vector) mat.Vector
 	// This is the observedState
-	StateObservation(t float64, state *mat.VecDense) *mat.VecDense
+	Observation(t float64, state mat.Vector) mat.Vector
 	// Returns the state space order
 	StateSpaceOrder() int
 	// Returns the observation space order.

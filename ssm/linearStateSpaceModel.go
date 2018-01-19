@@ -17,9 +17,9 @@ import (
 // where N is the number of inputs
 type LinearStateSpaceModel struct {
 	// State Dynamics
-	A *mat.Dense
+	A mat.Matrix
 	// Observation matrix
-	C *mat.Dense
+	C mat.Matrix
 	// List of input functions
 	Input []signal.VectorFunction
 }
@@ -58,39 +58,45 @@ func NewLinearStateSpaceModel(A, C *mat.Dense, input []signal.VectorFunction) *L
 	return &sys
 }
 
-// StateDerivative returns the state derivative.
+// Derivative returns the state derivative.
 // x'(t) = Ax(t) + Bu(t)
 // where state = x(t) at an arbitrary time t. Furthermore, Bu is the input vector field.
-func (model LinearStateSpaceModel) StateDerivative(t float64, state *mat.VecDense) *mat.VecDense {
+func (model LinearStateSpaceModel) Derivative(t float64, state mat.Vector) mat.Vector {
+	// Define variables
+	var (
+		tmpState mat.VecDense
+		tmpInput mat.VecDense
+	)
+
 	// Check if state and model parameters match.
 	m2, _ := model.A.Dims()
 	if m1, _ := state.Dims(); m1 != m2 {
-		panic(errors.New("State vector doesn't match state transistion matrix"))
+		panic(errors.New("State vector doesn't match state transition matrix"))
 	}
 
 	// Build input vector
 	// tempInput = B input[0](t) ... + B input[N](t)
-	tempInput := mat.NewVecDense(m2, nil)
+	tmpInput = *mat.NewVecDense(m2, nil)
 	for _, input := range model.Input {
-		tempInput.AddVec(tempInput, input.Bu(t))
+		tmpInput.AddVec(&tmpInput, input.Bu(t))
 	}
 	// Compute state transition
 	//  A x(t)
-	state.MulVec(model.A, state)
+	tmpState.MulVec(model.A, state)
 
 	// Add to new state derivative vector and return
-	tempInput.AddVec(state, tempInput)
-	return tempInput
+	tmpInput.AddVec(&tmpState, &tmpInput)
+	return &tmpInput
 }
 
-// StateObservation returns the observed stateDerivate
+// Observation returns the observed stateDerivate
 // y(t) = C x(t)
 // where
 // state = x(t) and t is an arbitrary time.
-func (model LinearStateSpaceModel) StateObservation(t float64, state *mat.VecDense) *mat.VecDense {
+func (model LinearStateSpaceModel) Observation(t float64, state mat.Vector) mat.Vector {
 	m2, _ := model.A.Dims()
 	if m1, _ := state.Dims(); m1 != m2 {
-		panic(errors.New("State vector doesn't match state transistion matrix"))
+		panic(errors.New("State vector doesn't match state transition matrix"))
 	}
 	mC, _ := model.C.Dims()
 	res := mat.NewVecDense(mC, nil)
