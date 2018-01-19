@@ -43,6 +43,9 @@ func care(A, B, Rinv, Q, X mat.Matrix, method interface{}) {
 		// Q
 		Jacobian.Add(&Jacobian, Q)
 
+		// Check norm
+		norm := mat.Norm(&Jacobian, 2)
+
 		// Scale with step length
 		Jacobian.Scale(met.stepLength, &Jacobian)
 
@@ -50,12 +53,23 @@ func care(A, B, Rinv, Q, X mat.Matrix, method interface{}) {
 		xtmp := X.(*mat.Dense)
 		xtmp.Add(xtmp, &Jacobian)
 
+		// check if negative determinant
+		// if mat.Det(xtmp) < 0 {
+		// 	m, _ := xtmp.Dims()
+		// 	tmp1.Scale(-1., gonumExtensions.Eye(m, m, 0))
+		// 	xtmp.Mul(&tmp1, xtmp)
+		// }
+
+		fmt.Println(mat.Formatted(xtmp))
+
 		// Check if derivative has converged
-		if mat.Norm(&Jacobian, 2) > met.precision {
+		if norm > met.precision {
 			// If not free memory
 			Jacobian.Reset()
 			tmp1.Reset()
 			tmp2.Reset()
+			// Reduce step size
+			met.stepLength /= 1.
 			// Recursively call yourself
 			care(A, B, Rinv, Q, X, method)
 		}
@@ -83,10 +97,13 @@ func care(A, B, Rinv, Q, X mat.Matrix, method interface{}) {
 
 		eigen := mat.Eigen{}
 
-		eigen.Factorize(psi, true, false)
+		eigen.Factorize(psi, false, true)
 
-		fmt.Println(mat.Formatted(eigen.LeftVectors()))
-		fmt.Println(eigen.Values(nil))
+		fmt.Println(mat.Formatted(eigen.Vectors()))
+		for _, number := range eigen.Values(nil) {
+			fmt.Printf("%e, ", real(number))
+		}
+		fmt.Print("\n")
 
 		// fmt.Printf("%v\n%v\n%v\n", mat.Formatted(tmp0), mat.Formatted(psi), mat.Formatted(tmp1))
 

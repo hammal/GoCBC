@@ -222,13 +222,29 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 		rec                               steadyStateReconstruction
 	)
 
+	// Compute state order
+	order, _ = linearStateSpaceModel.A.Dims()
+
 	// Compute inverse measurement noise covariance
 	inverseMeasurementNoiseCovariance.Inverse(measurementNoiseCovariance)
 
 	// Solve forward and backward steady state covariance function
-	// Vf := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
-	// TODO fix the right sign changes here!
-	// Vb := care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance)
+	Vf = mat.NewDense(order, order, nil)
+	careOption := Recursion{
+		precision:  1e-9,
+		stepLength: 1e-4,
+	}
+	care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance, Vf, careOption)
+
+	// Backward recursion with sign changes
+	Vb = mat.NewDense(order, order, nil)
+	tmpMatrix2.Scale(-1, inverseMeasurementNoiseCovariance)
+	tmpMatrix1.Scale(-1, inputNoiseCovariance)
+	care(linearStateSpaceModel.A, linearStateSpaceModel.C, tmpMatrix1, tmpMatrix2, Vb, careOption)
+
+	// Reset sizes and clear memory
+	tmpMatrix1.Reset()
+	tmpMatrix2.Reset()
 
 	// Compute state dynamics
 	// Forward: (A - Vf C Sigma_z^(-1) C^T )
@@ -252,7 +268,6 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 	tmpMatrix1.Add(Vf, Vb)
 
 	tmpMatrix2.Reset()
-	order, _ = linearStateSpaceModel.A.Dims()
 	tmpMatrix2.Grow(order, len(linearStateSpaceModel.Input))
 	for index, input := range linearStateSpaceModel.Input {
 		tmpMatrix2.SetCol(index, input.B.RawVector().Data)
