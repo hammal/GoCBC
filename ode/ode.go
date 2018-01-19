@@ -22,29 +22,37 @@ type RungeKutta struct {
 	Description butcherTableau
 }
 
-func (rk RungeKutta) Compute(from, to, float64, value mat.Matrix, system DifferentiableSystem) mat.Matrix {
+func (rk RungeKutta) Compute(from, to float64, value mat.Matrix, system DifferentiableSystem) mat.Matrix {
 	M, N := value.Dims()
 
-	res := make([]*mat.VecDense, N)
+	res := make([]mat.Vector, N)
+	err := make([]mat.Vector, N)
 
 	var wg sync.WaitGroup
+
 	wg.Add(N)
 
 	for column := 0; column < N; column++ {
-		res[column] = mat.NewVecDense(M, nil)
+		// res[column] = mat.NewVecDense(M, nil)
 		v := value.(*mat.Dense)
 		res[column] = v.ColView(column)
-		go rk.computeVec(from, to, res[column], system, &wg)
+
+		go func(column int, err []mat.Vector, from, to float64, res []mat.Vector, system DifferentiableSystem, wg *sync.WaitGroup) {
+			err[column] = rk.computeVec(from, to, res[column], system, wg)
+		}(column, err, from, to, res, system, &wg)
 	}
 
 	wg.Wait()
 
-	resMatrix := mat.NewDense(M, N, nil)
-	for column := 0; column < N; column++ {
-		resMatrix.SetCol(column, res[column].RawVector().Data)
+	errMatrix := mat.NewDense(M, N, nil)
+	for row := 0; row < M; row++ {
+		for column := 0; column < N; column++ {
+			v := value.(*mat.Dense)
+			v.Set(row, column, res[column].AtVec(row))
+			errMatrix.Set(row, column, err[column].AtVec(row))
+		}
 	}
-
-	return resMatrix
+	return errMatrix
 }
 
 // computeVec the update for a Runge-Kutta system based on a current value at t = from
@@ -114,10 +122,45 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 	return err
 }
 
+func (rk RungeKutta) AdaptiveCompute(from, to, errorTarget float64, value mat.Matrix, system DifferentiableSystem) error {
+	M, N := value.Dims()
+
+	res := make([]mat.Vector, N)
+	err := make([]error, N)
+
+	var wg sync.WaitGroup
+
+	wg.Add(N)
+
+	for column := 0; column < N; column++ {
+		// res[column] = mat.NewVecDense(M, nil)
+		v := value.(*mat.Dense)
+		res[column] = v.ColView(column)
+
+		go func(column int, err []error, from, to, errorTarget float64, res []mat.Vector, system DifferentiableSystem, wg *sync.WaitGroup) {
+			err[column] = rk.adaptiveComputeVec(from, to, errorTarget, res[column], system, wg)
+		}(column, err, from, to, errorTarget, res, system, &wg)
+	}
+
+	wg.Wait()
+
+	for column := 0; column < N; column++ {
+		for row := 0; row < M; row++ {
+			v := value.(*mat.Dense)
+			v.Set(row, column, res[column].AtVec(row))
+		}
+		if err[column] != nil {
+			return err[column]
+		}
+	}
+	return nil
+}
+
 // AdaptiveCompute implements an adaptive version which for a
 // given error tolerance err. Makes recursive steps such that the local error
 // never exceeds the error specification.
-func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value mat.Vector, system DifferentiableSystem) error {
+func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector, system DifferentiableSystem, thisSync *sync.WaitGroup) error {
+	defer thisSync.Done()
 	var (
 		tmpState1          *mat.VecDense
 		tmpState2          *mat.VecDense
@@ -146,7 +189,9 @@ func (rk RungeKutta) AdaptiveCompute(from, to, err float64, value mat.Vector, sy
 			// Copy the current state into tmpState
 			tmpState2.CopyVec(tmpState1)
 			// Execute the Runge Kutta computation
-			currentErrorVector = rk.Compute(tnow, tnext, tmpState2, system)
+			var sync sync.WaitGroup
+			sync.Add(1)
+			currentErrorVector = rk.computeVec(tnow, tnext, tmpState2, system, &sync)
 			// Reset and compute Error
 			currentError = 0.
 			// count = 0
