@@ -39,7 +39,7 @@ are created using one of the functions named New_... located in the same file. A
 
 
 ## Notes
-- TODO: implement control pre computations
+- ~~implement control pre computations~~
 - TODO: implement adc general Interface
 - ~~implement reconstruction steady state computator~~
 - IDEA: Check out [Cobra](https://github.com/spf13/cobra) for command line flags

@@ -15,10 +15,10 @@ type Control interface {
 	// Executes the control simulation and return the observations
 	Simulate() [][]float64
 	// Get the control contribution for simulation at index
-	getControlSimulationContribution(index int) []mat.Vector
+	getControlSimulationContribution(index int) ([]mat.Vector, error)
 	// Get the control contribution for filtering at index
-	GetForwardControlFilterContribution(index int) []mat.Vector
-	GetBackwardControlFilterContribution(index int) []mat.Vector
+	GetForwardControlFilterContribution(index int) ([]mat.Vector, error)
+	GetBackwardControlFilterContribution(index int) ([]mat.Vector, error)
 	// Precompute filter decisions based on filter dynamics
 	PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix)
 	// Length of control

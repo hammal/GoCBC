@@ -2,9 +2,9 @@ package control
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/hammal/adc/ode"
+	"github.com/hammal/adc/signal"
 	"github.com/hammal/adc/ssm"
 	"gonum.org/v1/gonum/mat"
 )
@@ -14,6 +14,8 @@ import (
 type AnalogSwitchControl struct {
 	// Number of controls
 	NumberOfControls int
+	// Controls
+	controls []signal.VectorFunction
 	// Sampling period
 	Ts float64
 	// Starting time
@@ -24,10 +26,11 @@ type AnalogSwitchControl struct {
 	state mat.Vector
 	// State space model
 	StateSpaceModel ssm.StateSpaceModel
-	// precomputed control descision vectors for simulation
+	// precomputed control decision vectors for simulation
 	controlSimulateLookUp [][]mat.Vector
-	// precomputed control descision vectors for filtering
-	controlFilterLookUp [][]mat.Vector
+	// precomputed control decision vectors for filtering
+	controlFilterLookUpForward  [][]mat.Vector
+	controlFilterLookUpBackward [][]mat.Vector
 }
 
 // Simulate the simulation tool for integratorControl
@@ -59,7 +62,7 @@ func (c *AnalogSwitchControl) Simulate() {
 		// with zero initial state.
 		tmpSimRes, _ = rk.Compute(t0, t1, tmpState, c.StateSpaceModel)
 		// Get the control contributions
-		tmpCtrl = c.getControlSimulationContribution(index)
+		tmpCtrl, _ = c.getControlSimulationContribution(index)
 		// Add the control contributions
 		// fmt.Printf("Simulation Contribution \n%v\n", mat.Formatted(tmpSimRes))
 
@@ -87,11 +90,11 @@ func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
 	// fmt.Printf("Decisions for \n%v\n => ", mat.Formatted(state))
 	for i := 0; i < c.NumberOfControls; i++ {
 		tmp = state.AtVec(i) > 0
-		fmt.Printf("%v, ", tmp)
+		// fmt.Printf("%v, ", tmp)
 		if tmp {
-			c.bits[index][i] = 0
-		} else {
 			c.bits[index][i] = 1
+		} else {
+			c.bits[index][i] = 0
 		}
 
 	}
@@ -99,34 +102,36 @@ func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
 
 // GetControlSimulationContribution returns the control decision vector
 // for simulation.
-func (c *AnalogSwitchControl) getControlSimulationContribution(index int) []mat.Vector {
+func (c *AnalogSwitchControl) getControlSimulationContribution(index int) ([]mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
-		panic(errors.New("Index out of range"))
+		return nil, errors.New("Index out of range")
+	}
+
+	if c.controlSimulateLookUp == nil {
+		return nil, errors.New("No pre-computed filter decisions.")
 	}
 
 	// fmt.Printf("Number of controls = %v", c.NumberOfControls)
 
 	tmp := make([]mat.Vector, c.NumberOfControls)
 
-	// retrieve the precomputed vector for contolLookUp[ #control][ decision]
+	// retrieve the precomputed vector for 	controlSimulateLookUp [][]mat.Vector [ #control][ decision]
 	var controlIndex, decision int
 	for controlIndex = 0; controlIndex < c.NumberOfControls; controlIndex++ {
 		decision = c.bits[index][controlIndex]
 		tmp[controlIndex] = c.controlSimulateLookUp[controlIndex][decision]
 	}
-	return tmp
+	return tmp, nil
 }
 
-// GetControlFilterContribution returns the control decision vector
-// for simulation.
-func (c *AnalogSwitchControl) GetControlFilterContribution(index int) ([]mat.Vector, error) {
+func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) ([]mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("index out of range")
 	}
 	// Check that there are precomputed filter decisions
-	if c.controlFilterLookUp == nil {
+	if c.controlFilterLookUpForward == nil {
 		return nil, errors.New("No pre-computed filter decisions.")
 	}
 
@@ -136,7 +141,28 @@ func (c *AnalogSwitchControl) GetControlFilterContribution(index int) ([]mat.Vec
 	var controlIndex, decision int
 	for controlIndex = 0; controlIndex < c.NumberOfControls; controlIndex++ {
 		decision = c.bits[index][controlIndex]
-		tmp[controlIndex] = c.controlFilterLookUp[controlIndex][decision]
+		tmp[controlIndex] = c.controlFilterLookUpForward[controlIndex][decision]
+	}
+	return tmp, nil
+}
+
+func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) ([]mat.Vector, error) {
+	// Check that index exists
+	if index < 0 || index > c.GetLength()-1 {
+		return nil, errors.New("index out of range")
+	}
+	// Check that there are precomputed filter decisions
+	if c.controlFilterLookUpBackward == nil {
+		return nil, errors.New("No pre-computed filter decisions.")
+	}
+
+	tmp := make([]mat.Vector, c.NumberOfControls)
+
+	// retrieve the precomputed vector for contolLookUp[ #control][ decision]
+	var controlIndex, decision int
+	for controlIndex = 0; controlIndex < c.NumberOfControls; controlIndex++ {
+		decision = c.bits[index][controlIndex]
+		tmp[controlIndex] = c.controlFilterLookUpBackward[controlIndex][decision]
 	}
 	return tmp, nil
 }
@@ -149,27 +175,63 @@ func (c AnalogSwitchControl) GetLength() int {
 // GetTs returns the sample period
 func (c AnalogSwitchControl) GetTs() float64 { return c.Ts }
 
-func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) []mat.Vector {
-	// TODO implement please!
-	panic("Not yet implemented")
-	return nil
-}
-
-func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) []mat.Vector {
-	// TODO implement please!
-	panic("Not yet implemented")
-	return nil
-}
-
 func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix) {
-	// TODO implement please!
-	panic("Not yet implementd")
+	c.controlFilterLookUpForward = make([][]mat.Vector, c.NumberOfControls)
+	c.controlFilterLookUpBackward = make([][]mat.Vector, c.NumberOfControls)
+
+	input := make([]signal.VectorFunction, 1)
+
+	var (
+		systemForward  *ssm.LinearStateSpaceModel
+		systemBackward *ssm.LinearStateSpaceModel
+		resFoward      mat.Vector
+		resBackward    mat.Vector
+	)
+
+	for controlIndex, controlFunction := range c.controls {
+		c.controlFilterLookUpForward[controlIndex] = make([]mat.Vector, 2)
+		c.controlFilterLookUpBackward[controlIndex] = make([]mat.Vector, 2)
+		input[0] = controlFunction
+
+		systemForward = ssm.NewLinearStateSpaceModel(forwardDynamics, forwardDynamics, input)
+		resFoward = c.PreCompute(systemForward, 0, c.GetTs())
+		negresForward := mat.NewVecDense(c.StateSpaceModel.StateSpaceOrder(), nil)
+		negresForward.ScaleVec(-1., resFoward)
+		c.controlFilterLookUpForward[controlIndex][0] = negresForward
+		c.controlFilterLookUpForward[controlIndex][1] = resFoward
+
+		// fmt.Printf("Forward :\n%v\nNegation: \n%v\n", resFoward, negresForward)
+
+		systemBackward = ssm.NewLinearStateSpaceModel(backwardDynamics, backwardDynamics, input)
+		resBackward = c.PreCompute(systemBackward, 0, c.GetTs())
+		negresBackward := mat.NewVecDense(c.StateSpaceModel.StateSpaceOrder(), nil)
+		negresBackward.ScaleVec(-1, resBackward)
+		c.controlFilterLookUpBackward[controlIndex][0] = negresBackward
+		c.controlFilterLookUpBackward[controlIndex][1] = resBackward
+	}
+	// for index, _ := range controlSimulateLookUp {
+	// 	// Initialize a receive vector for each control bit
+	// 	controlSimulateLookUp[index] = make([]mat.Vector, 2)
+}
+
+func (c AnalogSwitchControl) PreCompute(system ode.DifferentiableSystem, from, to float64) mat.Vector {
+	o := ode.NewFehlberg45()
+	value := mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
+	res, _ := o.Compute(from, to, value, system)
+	res2 := res.(*mat.Dense)
+	return res2.ColView(0)
 }
 
 // Returns an initialized analog switch control
 func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, state mat.Vector, StateSpaceModel *ssm.LinearStateSpaceModel) *AnalogSwitchControl {
 	order := StateSpaceModel.StateSpaceOrder()
 	numberOfControls := len(controls)
+	ctrl := make([]signal.VectorFunction, numberOfControls)
+
+	// Construct default controls
+	for index := range controls {
+		ctrl[index] = signal.NewInput(func(arg1 float64) float64 { return 1. }, controls[index])
+	}
 
 	// If state is an nil pointer initialize a new zero vector.
 	st, ok := state.(*mat.VecDense)
@@ -200,30 +262,22 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 		tmp0 := mat.NewVecDense(order, nil)
 		tmp1 := mat.NewVecDense(order, nil)
 
-		tmp1.MulVec(Ad, controls[index])
-		tmp0.ScaleVec(-1, controls[index])
-		tmp0.MulVec(Ad, tmp0)
-		controlSimulateLookUp[index][0] = tmp0
-		controlSimulateLookUp[index][1] = tmp1
+		tmp0.MulVec(Ad, controls[index])
+		tmp1.ScaleVec(-1, controls[index])
+		tmp1.MulVec(Ad, tmp0)
+		controlSimulateLookUp[index][0] = tmp1
+		controlSimulateLookUp[index][1] = tmp0
 
 	}
-
-	// ControplFilterLookUp
-	controlFilterLookUp := make([][]mat.Vector, numberOfControls)
-	for index, _ := range controlFilterLookUp {
-		controlFilterLookUp[index] = make([]mat.Vector, 2)
-	}
-
-	fmt.Println("Inital state is \n%v\n", mat.Formatted(st))
 
 	return &AnalogSwitchControl{
-		numberOfControls,
-		ts,
-		t0,
-		bits,
-		st,
-		StateSpaceModel,
-		controlSimulateLookUp,
-		controlFilterLookUp,
+		NumberOfControls:      numberOfControls,
+		controls:              ctrl,
+		Ts:                    ts,
+		T0:                    t0,
+		bits:                  bits,
+		state:                 st,
+		StateSpaceModel:       StateSpaceModel,
+		controlSimulateLookUp: controlSimulateLookUp,
 	}
 }

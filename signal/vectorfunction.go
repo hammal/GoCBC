@@ -42,6 +42,6 @@ func (vf VectorFunction) Value(t float64) mat.Vector {
 
 // NewInput returns a pointer to a new VectorFunction object
 // initalised with u(t) and B
-func NewInput(u func(float64) float64, B *mat.VecDense) VectorFunction {
+func NewInput(u func(float64) float64, B mat.Vector) VectorFunction {
 	return VectorFunction{u, B}
 }
