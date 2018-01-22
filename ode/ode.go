@@ -14,6 +14,9 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+// DifferentiableSystem is an interface describing the necessary functions
+// for a system to be solved using the ordinary differential equation solvers
+// defined in this package.
 type DifferentiableSystem interface {
 	Derivative(t float64, state mat.Vector) mat.Vector
 }
@@ -23,58 +26,84 @@ type RungeKutta struct {
 	Description butcherTableau
 }
 
-func (rk RungeKutta) Compute(from, to float64, value mat.Matrix, system DifferentiableSystem) mat.Matrix {
+// Compute ...
+func (rk RungeKutta) Compute(from, to float64, value mat.Matrix, system DifferentiableSystem) (mat.Matrix, error) {
 	M, N := value.Dims()
 
-	res := make([]mat.Vector, N)
-	err := make([]mat.Vector, N)
+	res := make([]chan mat.Vector, N)
 
 	var wg sync.WaitGroup
 
 	wg.Add(N)
 
-	for column := 0; column < N; column++ {
-		// res[column] = mat.NewVecDense(M, nil)
-		v := value.(*mat.Dense)
-		res[column] = v.ColView(column)
+	tmpVec := value.(*mat.Dense)
+	resValue := mat.NewDense(M, N, nil)
 
-		go func(column int, err []mat.Vector, from, to float64, res []mat.Vector, system DifferentiableSystem, wg *sync.WaitGroup) {
-			err[column] = rk.computeVec(from, to, res[column], system, wg)
-			fmt.Printf("Subroutine %v \n res = \n%v\n", column, mat.Formatted(res[column]))
-		}(column, err, from, to, res, system, &wg)
+	for column := 0; column < N; column++ {
+		res[column] = make(chan mat.Vector)
+
+		go func(
+			from, to float64,
+			initalValue mat.Vector,
+			system DifferentiableSystem,
+			wg *sync.WaitGroup,
+			receiveChannel chan mat.Vector,
+		) {
+			// Report when done
+			defer wg.Done()
+			// Close receive channel when done
+			defer close(receiveChannel)
+			// Compute the adaptive vector function
+			res, _ := rk.computeVec(from, to, initalValue, system)
+			// Send back the result through channels
+			receiveChannel <- res
+		}(from, to, tmpVec.ColView(column), system, &wg, res[column])
 	}
 
-	wg.Wait()
+	var tmp mat.Vector
 
-	errMatrix := mat.NewDense(M, N, nil)
-	for row := 0; row < M; row++ {
-		for column := 0; column < N; column++ {
-			v := value.(*mat.Dense)
-			v.Set(row, column, res[column].AtVec(row))
-			errMatrix.Set(row, column, err[column].AtVec(row))
+	for colindex, col := range res {
+		tmp = <-col
+		for rowIndex := 0; rowIndex < M; rowIndex++ {
+			resValue.Set(rowIndex, colindex, tmp.AtVec(rowIndex))
 		}
 	}
-	return errMatrix
+
+	// This might not serve any purpose
+	// wg.Wait()
+
+	return resValue, nil
 }
 
-// computeVec the update for a Runge-Kutta system based on a current value at t = from
+// computeVec computes the update for a Runge-Kutta system based on a current value at t = from
 // , a target time t = to, a initial value x(t=from) = value and a system model ode.
-// When algorithm is finished the result is copied into the value.
-func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system DifferentiableSystem, sync *sync.WaitGroup) mat.Vector {
-	defer sync.Done()
-	// Variables
+// The function returns a result and associated error vector
+func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system DifferentiableSystem) (mat.Vector, mat.Vector) {
+
+	// Define variables
 	var (
 		tempV *mat.VecDense
 	)
 
 	// State order
 	M, _ := value.Dims()
+
 	// The precomputed derivative points
 	K := make([]mat.Vector, rk.Description.stages)
+
 	// Step length
 	h := to - from
+
+	// Compute all derivative points
 	for index := range K {
+
+		// Check system type for different implementations
 		switch sys := system.(type) {
+
+		// Linear state space models:
+		// The state can be computed in closed form such x(t)= e^(A (to- from)) x(0)
+		// And thus only the inputs need to be solved using the Runge Kutta methods.
+		// Note that the state is added in a later segment
 		case *ssm.LinearStateSpaceModel:
 			tempV = mat.NewVecDense(M, nil)
 			for _, inp := range sys.Input {
@@ -82,9 +111,10 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 			}
 			// fmt.Println(mat.Formatted(tempV))
 			K[index] = tempV
+
+			// The default method for numerically solving ODE
 		default:
 			// Initialize an intermediate vector
-			// tempV := mat.NewVecDense(M, nil)
 			tempV.CloneVec(value)
 			// Compute the relevant vector by combining previously computed derivate points
 			// according to Butcher Tableau.
@@ -98,16 +128,19 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 
 	}
 
+	// Summarise the different derivation points
 	switch sys := system.(type) {
+	// For the Linear state space model this can be done in closed form
 	case *ssm.LinearStateSpaceModel:
-		tempV.Reset()
 		// compute e^(AT_s) and move state forward
 		var tmpMatrix mat.Dense
 		tmpMatrix.Scale(to-from, sys.A)
 		tmpMatrix.Exp(&tmpMatrix)
+		// Initialize tempV as the initial state with the state dynamics applied.
+		tempV.Reset()
 		tempV.MulVec(&tmpMatrix, value)
 	default:
-		// Reset tempV
+		// Reset tempV to the initial value
 		tempV.CloneVec(value)
 	}
 
@@ -122,53 +155,78 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 		}
 	}
 
-	value = tempV
+	// fmt.Printf("Result from computeVec\n%v\n", value)
 
-	fmt.Printf("Result from computeVec\n%v\n", value)
-
-	return err
+	return tempV, err
 }
 
-func (rk RungeKutta) AdaptiveCompute(from, to, errorTarget float64, value mat.Matrix, system DifferentiableSystem) error {
+// AdaptiveCompute implements an adaptive version which for a
+// given error tolerance err. Makes recursive steps such that the local error
+// never exceeds the error specification. The functions returns a result matrix
+// and a error struct.
+func (rk RungeKutta) AdaptiveCompute(from, to, errorTarget float64, value mat.Matrix, system DifferentiableSystem) (mat.Matrix, error) {
 	M, N := value.Dims()
 
-	res := make([]mat.Vector, N)
-	err := make([]error, N)
+	res := make([]chan mat.Vector, N)
+	err := make([]chan error, N)
 
 	var wg sync.WaitGroup
 
 	wg.Add(N)
 
-	for column := 0; column < N; column++ {
-		// res[column] = mat.NewVecDense(M, nil)
-		v := value.(*mat.Dense)
-		res[column] = v.ColView(column)
-
-		go func(column int, err []error, from, to, errorTarget float64, res []mat.Vector, system DifferentiableSystem, wg *sync.WaitGroup) {
-			err[column] = rk.adaptiveComputeVec(from, to, errorTarget, res[column], system, wg)
-		}(column, err, from, to, errorTarget, res, system, &wg)
-	}
-
-	wg.Wait()
+	tmpVec := value.(*mat.Dense)
+	resValue := mat.NewDense(M, N, nil)
 
 	for column := 0; column < N; column++ {
-		for row := 0; row < M; row++ {
-			v := value.(*mat.Dense)
-			v.Set(row, column, res[column].AtVec(row))
-		}
-		if err[column] != nil {
-			return err[column]
+		res[column] = make(chan mat.Vector, 1)
+		err[column] = make(chan error, 1)
+
+		go func(
+			from, to, errorTarget float64,
+			initalValue mat.Vector,
+			system DifferentiableSystem,
+			wg *sync.WaitGroup,
+			receiveChannel chan mat.Vector,
+			errorChannel chan error,
+		) {
+			// Report when done
+			defer wg.Done()
+			// Close receive channel when done
+			defer close(receiveChannel)
+			defer close(errorChannel)
+			// Compute the adaptive vector function
+			res, err := rk.adaptiveComputeVec(from, to, errorTarget, initalValue, system)
+			// Send back the result through channels
+			receiveChannel <- res
+			errorChannel <- err
+		}(from, to, errorTarget, tmpVec.ColView(column), system, &wg, res[column], err[column])
+	}
+
+	// Check for errors and return immediately if so.
+	for _, e := range err {
+		if ee := <-e; ee != nil {
+			return nil, ee
 		}
 	}
-	return nil
+
+	var tmp mat.Vector
+
+	for colindex, col := range res {
+		tmp = <-col
+		for rowIndex := 0; rowIndex < M; rowIndex++ {
+			resValue.Set(rowIndex, colindex, tmp.AtVec(rowIndex))
+		}
+	}
+
+	// wg.Wait()
+
+	return resValue, nil
 }
 
-// AdaptiveCompute implements an adaptive version which for a
-// given error tolerance err. Makes recursive steps such that the local error
-// never exceeds the error specification.
-func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector, system DifferentiableSystem, thisSync *sync.WaitGroup) error {
-	defer thisSync.Done()
+// adaptiveComputeVec computes...
+func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector, system DifferentiableSystem) (mat.Vector, error) {
 	var (
+		tmpVec             mat.Vector
 		tmpState1          *mat.VecDense
 		tmpState2          *mat.VecDense
 		currentErrorVector mat.Vector
@@ -177,7 +235,7 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 		count              int
 	)
 	// Set max number of iterations
-	const maxNumberOfIterations int = 10000
+	const maxNumberOfIterations int = 1000000
 
 	// Initialize current time
 	tnow = from
@@ -196,9 +254,8 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 			// Copy the current state into tmpState
 			tmpState2.CopyVec(tmpState1)
 			// Execute the Runge Kutta computation
-			var sync sync.WaitGroup
-			sync.Add(1)
-			currentErrorVector = rk.computeVec(tnow, tnext, tmpState2, system, &sync)
+			tmpVec, currentErrorVector = rk.computeVec(tnow, tnext, tmpState2, system)
+			tmpState2 = tmpVec.(*mat.VecDense)
 			// Reset and compute Error
 			currentError = 0.
 			// count = 0
@@ -216,20 +273,17 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 			// Increment counter and check if we are allowed more trials
 			count++
 			if count >= maxNumberOfIterations {
-				return errors.New("Maximum number of iterations reached adaptive Runge-Kutta doesn't converge")
+				errorString := fmt.Sprintf("Maximum number of iterations reached adaptive Runge-Kutta doesn't converge\n last error was = %v", currentError)
+				return nil, errors.New(errorString)
 			}
 		}
 		// Save this state and update tnow
 		tmpState1.CopyVec(tmpState2)
-		fmt.Println("This happend")
-		fmt.Println(mat.Formatted(tmpState2))
 		tnow = tnext
-
 	}
-	value = tmpState1
 
 	// Successful integration!  Return nil error
-	return nil
+	return tmpState1, nil
 }
 
 // NewRK4 function returns a forth order Runge-Kutta object

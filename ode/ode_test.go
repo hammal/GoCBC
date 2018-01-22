@@ -83,7 +83,7 @@ func TestComputeA100States(y *testing.T) {
 
 func TestAdaptiveCompute(y *testing.T) {
 	odeObject := NewFehlberg45()
-	t0, t1 := 0., 1.
+	t0, t1 := 0., 1e-2
 	err := 1e-4
 	initState := mat.NewDense(9, 1, []float64{1.2, 32., 34, 12, 532, 12, 35, 1, 0.91283})
 	data := make([]float64, 9*9)
@@ -99,19 +99,20 @@ func TestAdaptiveCompute(y *testing.T) {
 
 	sys := ssm.NewLinearStateSpaceModel(stateTransitionMatrix, observationVector, inputs)
 
-	sucess := odeObject.AdaptiveCompute(t0, t1, err, initState, sys)
+	_, sucess := odeObject.AdaptiveCompute(t0, t1, err, initState, sys)
 
 	if sucess != nil {
+		fmt.Printf("Adaptive Compute ended with error\n%v\n", sucess)
 		y.Error(sucess)
+	} else {
+		// fmt.Println(mat.Formatted(res))
 	}
-
-	fmt.Println(mat.Formatted(initState))
 }
 
 func TestAdaptiveComputeExceedCount(y *testing.T) {
 	odeObject := NewFehlberg45()
-	t0, t1 := 0., 10.
-	err := 1e-9
+	t0, t1 := 0., 1e-2
+	err := 1e-3
 	initState := mat.NewDense(9, 1, []float64{1.2, 32., 34, 12, 532, 12, 35, 1, 0.91283})
 	data := make([]float64, 9*9)
 	for index := 0; index < 9*9; index++ {
@@ -126,22 +127,23 @@ func TestAdaptiveComputeExceedCount(y *testing.T) {
 
 	sys := ssm.NewLinearStateSpaceModel(stateTransitionMatrix, observationVector, inputs)
 
-	sucess := odeObject.AdaptiveCompute(t0, t1, err, initState, sys)
+	_, sucess := odeObject.AdaptiveCompute(t0, t1, err, initState, sys)
 
-	if sucess == nil {
+	if sucess != nil {
+		fmt.Printf("Adaptive Compute ended with error\n%v\n", sucess)
 		y.Error("Didn't produce error for extreme integration length")
+	} else {
+		// fmt.Println(mat.Formatted(res))
 	}
-
-	fmt.Println(mat.Formatted(initState))
 }
 
 func TestAdaptiveComputeManyStates(y *testing.T) {
 	odeObject := NewRK4()
-	t0, t1 := 0., 1.234567891
+	t0, t1 := 0., 1e-3
 	N := 100
 	M := 1000
 	K := 89
-	err := 1e-9
+	err := 1e-3
 	data := make([]float64, N*M)
 	for index := range data {
 		data[index] = rand.Float64()
@@ -163,7 +165,11 @@ func TestAdaptiveComputeManyStates(y *testing.T) {
 
 	observationVector := gonumExtensions.Eye(M, N, 0)
 	sys.C = observationVector
-	odeObject.AdaptiveCompute(t0, t1, err, initState, sys)
-	fmt.Println("TestAdaptiveComputeManyStates: Passed")
-	// fmt.Println(mat.Formatted(initState))
+	_, sucess := odeObject.AdaptiveCompute(t0, t1, err, initState, sys)
+	if sucess != nil {
+		fmt.Printf("Adaptive Compute ended with error\n%v\n", sucess)
+		y.Error("Didn't produce error for extreme integration length")
+	} else {
+		// fmt.Println(mat.Formatted(res))
+	}
 }

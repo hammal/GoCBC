@@ -18,8 +18,9 @@ func (nI NumericalIntegration) Integrate(from, to float64) mat.Matrix {
 	tmpRes := mat.NewVecDense(n, nil)
 	var faultTolerance = 1e-9
 	o := NewFehlberg45()
-	if o.AdaptiveCompute(from, to, faultTolerance, tmpRes, nI) != nil {
+	res, err := o.AdaptiveCompute(from, to, faultTolerance, tmpRes, nI)
+	if err != nil {
 		panic("Adaptive Computation failed")
 	}
-	return tmpRes
+	return res
 }
