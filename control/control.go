@@ -54,14 +54,14 @@ func zeroOrderHold(A mat.Matrix, t float64) mat.Matrix {
 		tempState := mat.NewDense(M, 1, nil)
 		// Solve initial value problem using adaptive Runge-Kutta Fehlberg4(5) method.
 		// od.AdaptiveCompute(0., t, err, tempState, tempSSM)
-		od.Compute(0., t, tempState, tempSSM)
+		tempRes, _ := od.Compute(0., t, tempState, tempSSM)
 
-		fmt.Println(mat.Formatted(tempState))
-		fmt.Println(M)
+		// fmt.Println(mat.Formatted(tempRes))
+		// fmt.Println(M)
 
 		// Fill up result matrix for given unit vector.
 		for row := 0; row < M; row++ {
-			res.Set(row, column, tempState.At(row, 0))
+			res.Set(row, column, tempRes.At(row, 0))
 		}
 	}
 	return res

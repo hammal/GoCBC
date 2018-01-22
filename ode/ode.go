@@ -105,27 +105,23 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 		// And thus only the inputs need to be solved using the Runge Kutta methods.
 		// Note that the state is added in a later segment
 		case *ssm.LinearStateSpaceModel:
-			tempV = mat.NewVecDense(M, nil)
-			for _, inp := range sys.Input {
-				tempV.AddVec(tempV, inp.Value(from+h*rk.Description.nodes[index]))
-			}
-			// fmt.Println(mat.Formatted(tempV))
-			K[index] = tempV
+			tmpM := sys.StateSpaceOrder()
+			tempV = mat.NewVecDense(tmpM, nil)
 
-			// The default method for numerically solving ODE
 		default:
 			// Initialize an intermediate vector
+			// fmt.Printf("This should not happen for %T", system)
+			tempV = mat.NewVecDense(M, nil)
 			tempV.CloneVec(value)
-			// Compute the relevant vector by combining previously computed derivate points
-			// according to Butcher Tableau.
-			for index2, a := range rk.Description.rungeKuttaMatrix[index] {
-				tempV.AddScaledVec(tempV, h*a, K[index2])
-			}
-			// Insert the new derivate point
-			// These can be implemented differently depending on underlying model
-			K[index] = system.Derivative(from+h*rk.Description.nodes[index], tempV)
 		}
-
+		// Compute the relevant vector by combining previously computed derivate points
+		// according to Butcher Tableau.
+		for index2, a := range rk.Description.rungeKuttaMatrix[index] {
+			tempV.AddScaledVec(tempV, h*a, K[index2])
+		}
+		// Insert the new derivate point
+		// These can be implemented differently depending on underlying model
+		K[index] = system.Derivative(from+h*rk.Description.nodes[index], tempV)
 	}
 
 	// Summarise the different derivation points

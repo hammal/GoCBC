@@ -33,33 +33,45 @@ type AnalogSwitchControl struct {
 // Simulate the simulation tool for integratorControl
 func (c *AnalogSwitchControl) Simulate() {
 	var (
-		tmpCtrl  []mat.Vector
-		tmpState *mat.Dense
+		tmpCtrl   []mat.Vector
+		tmpState  *mat.Dense
+		tmpSimRes mat.Matrix
 	)
 
 	tmpState = mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
-	tmpState.Copy(c.state)
+
+	for row := 0; row < c.StateSpaceModel.StateSpaceOrder(); row++ {
+		tmpState.Set(row, 0, c.state.AtVec(row))
+	}
 
 	t0 := c.T0
 	t1 := t0 + c.Ts
 	rk := ode.NewRK4()
 	for index := 0; index < c.GetLength(); index++ {
+		// fmt.Printf("State Before \n%v\n", mat.Formatted(tmpState))
+		// fmt.Printf("Current state = \n%v\n", mat.Formatted(tmpState))
 		// Update control based on current state
-		c.updateControl(index)
+		c.updateControl(tmpState.ColView(0), index)
 		// Simulate the ADC without control
 		// There is a complication here since we now the exact state dynamics
 		// if the state space model was a linear model. Thus this could be realized
 		// using a pre-computed Ad=e^(A Ts) and then using the Runge-Kutta method
 		// with zero initial state.
-		rk.Compute(t0, t1, tmpState, c.StateSpaceModel)
+		tmpSimRes, _ = rk.Compute(t0, t1, tmpState, c.StateSpaceModel)
 		// Get the control contributions
 		tmpCtrl = c.getControlSimulationContribution(index)
 		// Add the control contributions
-		fmt.Println(mat.Formatted(tmpState))
+		// fmt.Printf("Simulation Contribution \n%v\n", mat.Formatted(tmpSimRes))
+
+		tmpState = mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
+		tmpState.Add(tmpState, tmpSimRes)
 		for _, tmpVec := range tmpCtrl {
-			fmt.Printf("Control Contribution\n%v\n", mat.Formatted(tmpVec))
+			// fmt.Printf("Control Contribution\n%v\n", mat.Formatted(tmpVec))
 			tmpState.Add(tmpState, tmpVec)
 		}
+
+		// fmt.Printf("State After \n%v\n", mat.Formatted(tmpState))
+
 		// Move increment to new time step
 		t0 += c.Ts
 		t1 += c.Ts
@@ -69,11 +81,13 @@ func (c *AnalogSwitchControl) Simulate() {
 
 // updateControl computes the control decisions for index based on the current
 // state, held in the reviver type.
-func (c *AnalogSwitchControl) updateControl(index int) {
+func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
 	// Set control bits
 	var tmp bool
+	// fmt.Printf("Decisions for \n%v\n => ", mat.Formatted(state))
 	for i := 0; i < c.NumberOfControls; i++ {
-		tmp = c.state.AtVec(i) > 0
+		tmp = state.AtVec(i) > 0
+		fmt.Printf("%v, ", tmp)
 		if tmp {
 			c.bits[index][i] = 0
 		} else {
@@ -91,7 +105,7 @@ func (c *AnalogSwitchControl) getControlSimulationContribution(index int) []mat.
 		panic(errors.New("Index out of range"))
 	}
 
-	fmt.Printf("Number of controls = %v", c.NumberOfControls)
+	// fmt.Printf("Number of controls = %v", c.NumberOfControls)
 
 	tmp := make([]mat.Vector, c.NumberOfControls)
 
@@ -153,7 +167,7 @@ func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, bac
 }
 
 // Returns an initialized analog switch control
-func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, state mat.Vector, StateSpaceModel ssm.LinearStateSpaceModel) *AnalogSwitchControl {
+func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, state mat.Vector, StateSpaceModel *ssm.LinearStateSpaceModel) *AnalogSwitchControl {
 	order := StateSpaceModel.StateSpaceOrder()
 	numberOfControls := len(controls)
 
@@ -161,7 +175,7 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 	st, ok := state.(*mat.VecDense)
 	if !ok {
 		st = mat.NewVecDense(order, nil)
-		state = st
+		// state = st
 	}
 
 	// Create decision table
@@ -174,6 +188,8 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 	// var tmp0, tmp1 *mat.VecDense
 	// Compute e^(A Ts)
 	Ad := zeroOrderHold(StateSpaceModel.A, ts)
+	// fmt.Println("Ad: ")
+	// fmt.Println(mat.Formatted(Ad))
 
 	// Create decision Simulation lookup table
 	controlSimulateLookUp := make([][]mat.Vector, numberOfControls)
@@ -190,8 +206,6 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 		controlSimulateLookUp[index][0] = tmp0
 		controlSimulateLookUp[index][1] = tmp1
 
-		fmt.Println(mat.Formatted(Ad))
-		panic("Random")
 	}
 
 	// ControplFilterLookUp
@@ -199,6 +213,8 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 	for index, _ := range controlFilterLookUp {
 		controlFilterLookUp[index] = make([]mat.Vector, 2)
 	}
+
+	fmt.Println("Inital state is \n%v\n", mat.Formatted(st))
 
 	return &AnalogSwitchControl{
 		numberOfControls,

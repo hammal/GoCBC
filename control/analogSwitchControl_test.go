@@ -29,16 +29,17 @@ func TestAnalogSwitchControl(t *testing.T) {
 	data[0] = -6250.
 	inp := make([]signal.VectorFunction, 1)
 	inp[0] = signal.NewInput(func(arg1 float64) float64 { return math.Exp(-arg1) }, mat.NewVecDense(order, data))
+	// inp[0] = signal.NewInput(func(arg1 float64) float64 { return 0. }, mat.NewVecDense(order, data))
 	stateSpaceModel := ssm.NewIntegratorChain(order, -6250, inp)
 
-	control := NewAnalogSwitchControl(length, controls, ts, t0, nil, *stateSpaceModel)
+	ctrl := NewAnalogSwitchControl(length, controls, ts, t0, nil, stateSpaceModel)
 
-	for index := 0; index < control.NumberOfControls; index++ {
-		fmt.Println(mat.Formatted(control.controlSimulateLookUp[index][0]))
-		fmt.Println(mat.Formatted(control.controlSimulateLookUp[index][1]))
+	for index := 0; index < ctrl.NumberOfControls; index++ {
+		fmt.Println(mat.Formatted(ctrl.controlSimulateLookUp[index][0]))
+		fmt.Println(mat.Formatted(ctrl.controlSimulateLookUp[index][1]))
 	}
 
-	control.Simulate()
+	ctrl.Simulate()
 
 	// for index := 0; index < control.Length(); index++ {
 	// 	for ctrl := 0; ctrl < control.NumberOfControls; ctrl++ {
