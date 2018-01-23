@@ -223,7 +223,7 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 	)
 
 	// Compute state order
-	order, _ = linearStateSpaceModel.A.Dims()
+	order = linearStateSpaceModel.StateSpaceOrder()
 
 	// Compute inverse measurement noise covariance
 	inverseMeasurementNoiseCovariance.Inverse(measurementNoiseCovariance)

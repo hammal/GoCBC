@@ -29,3 +29,6 @@ also VecToMat is redundant as it is an matrix already.
 
 #### Matrix checks norm etc
 ###### check if INF or NAN
+
+## Todos
+- TODO: Write tests for gonumExtensions
