@@ -126,10 +126,10 @@ func TestAnalogSwitchControlSimulateAndGetFilterContributions(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		for controlIndex, control := range controlDesc {
-			fmt.Printf("%v for control %v which results in the control contribution:\n", ctrl.bits[index][controlIndex], controlIndex)
-			fmt.Printf("%v \n", mat.Formatted(control))
+		for controlIndex, bits := range ctrl.bits[index] {
+			fmt.Printf("%v for control %v\n", bits, controlIndex)
 		}
+		fmt.Printf("Which results in the contribution\n%v \n", mat.Formatted(controlDesc))
 
 		// fmt.Printf(" for index %v \n", index)
 	}

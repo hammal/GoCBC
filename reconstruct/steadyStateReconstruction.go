@@ -1,10 +1,12 @@
 package reconstruct
 
 import (
+	// "fmt"
 	"fmt"
 	"sync"
 
 	"github.com/hammal/adc/control"
+	"github.com/hammal/adc/gonumExtensions"
 	"github.com/hammal/adc/ssm"
 	"gonum.org/v1/gonum/mat"
 )
@@ -21,13 +23,19 @@ type steadyStateReconstruction struct {
 	W mat.Dense
 	// Control interface
 	control control.Control
+	// estimate
+	estimate [][]float64
+	// ForwardMessage
+	forwardMessage []mat.VecDense
+	// BackwardMessage
+	backwardMessage []mat.VecDense
 }
 
 // Reconstruction returns the reconstructed estimates based on the associated
 // control interface.
 //
 // The returned data structure is [number of time indices][number of estimates]*float64
-func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
+func (rec *steadyStateReconstruction) Reconstruction() [][]float64 {
 
 	// Sync group for go routines
 	var wg sync.WaitGroup
@@ -36,19 +44,19 @@ func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 	n := rec.control.GetLength()
 
 	// Initialize the state
-	forwardStates := make([]*mat.VecDense, n)
-	backwardStates := make([]*mat.VecDense, n)
+	rec.forwardMessage = make([]mat.VecDense, n)
+	rec.backwardMessage = make([]mat.VecDense, n)
 
 	// Number of states
 	m, _ := rec.Af.Dims()
 
 	// Create two channels for reporting back computed states
-	forwardReport := make(chan int, 10)
-	backwardReport := make(chan int, 10)
+	forwardReport := make(chan int, 100)
+	backwardReport := make(chan int, 100)
 
 	// Initialize the first respectively last state
-	forwardStates[0] = mat.NewVecDense(m, nil)
-	backwardStates[n-1] = mat.NewVecDense(m, nil)
+	rec.forwardMessage[0] = *mat.NewVecDense(m, nil)
+	rec.backwardMessage[n-1] = *mat.NewVecDense(m, nil)
 	// Report that these states have been computed
 	forwardReport <- 0
 	backwardReport <- n - 1
@@ -57,61 +65,67 @@ func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 	wg.Add(2)
 
 	// Execute forward and Backward pass concurrently
-	go rec.forwardMessagePassing(forwardStates, &wg, forwardReport)
-	go rec.backwardMessagePassing(backwardStates, &wg, backwardReport)
+	go rec.forwardMessagePassing(&wg, forwardReport)
+	go rec.backwardMessagePassing(&wg, backwardReport)
 
 	// Initialize result vector
-	res := make([][]*float64, n)
+	res := make([][]float64, n)
 	numberOfEstimates, _ := rec.W.Dims()
 	for index := range res {
-		res[index] = make([]*float64, numberOfEstimates)
+		res[index] = make([]float64, numberOfEstimates)
 	}
 
 	// Keep track of what stages have been computed and commence input estimations if possible
 	//
 	// These are the two slices for keeping track.
-	forwardComputedStates := make([]bool, n)
-	backwardComputedStates := make([]bool, n)
-
-	var remainingNumberOfEstimates = n
+	forwardComputedStates := SafeLedger{ledger: make([]bool, n)}
+	backwardComputedStates := SafeLedger{ledger: make([]bool, n)}
+	remainingNumberOfEstimates := SafeCounter{v: n}
 
 	// Add the number of go routines required to complete input estimation
-	wg.Add(remainingNumberOfEstimates)
+	wg.Add(remainingNumberOfEstimates.Get())
+
+	rec.estimate = make([][]float64, n)
+	_, nrInputs := rec.W.Dims()
+	for tmpEst := range rec.estimate {
+		rec.estimate[tmpEst] = make([]float64, nrInputs)
+	}
 
 	// Loop until there are no more estimates to be initiated
-	for remainingNumberOfEstimates > 0 {
+	for remainingNumberOfEstimates.Get() > 0 {
 		// Check if there are any received reports
 		select {
 		// If there is a forward computation that finished
 		case f := <-forwardReport:
 			// if state has already been computed for the backward recursion?
-			if backwardComputedStates[f] {
+			if backwardComputedStates.Get(f) {
 				// Start input estimation
-				go rec.inputEstimate(res[f], forwardStates[f], backwardStates[f], &wg)
+				go rec.inputEstimate(f, &wg)
 				// Reduce the number of remaining input estimate computations
-				remainingNumberOfEstimates--
+				remainingNumberOfEstimates.Dec(1)
 
-				fmt.Printf("Started ank input estimation from %s for index %v\n", "forward", f)
+				// fmt.Printf("Started an input estimation from %s for index %v\n", "forward", f)
 			} else {
 				// Register that this state has been computed
-				forwardComputedStates[f] = true
+				forwardComputedStates.Set(f)
 			}
 			// If there is a backward computation that finished
 		case b := <-backwardReport:
 			// check if state has already been computed by the forward recursion?
-			if forwardComputedStates[b] {
+			// fmt.Print(forwardComputedStates[b])
+			if forwardComputedStates.Get(b) {
 				// Start input estimation
-				go rec.inputEstimate(res[b], forwardStates[b], backwardStates[b], &wg)
+				go rec.inputEstimate(b, &wg)
 				// Reduce the number of remaining estimates
-				remainingNumberOfEstimates--
+				remainingNumberOfEstimates.Dec(1)
 
-				fmt.Printf("Started an input estimation from %s for index %v\n", "backward", b)
+				// fmt.Printf("Started an input estimation from %s for index %v\n", "backward", b)
 			} else {
 				// Register the state as computed
-				backwardComputedStates[b] = true
+				backwardComputedStates.Set(b)
 			}
-		default:
-			fmt.Println("Nothing ready for computing")
+
+			// fmt.Println("After switch statement")
 		}
 	}
 
@@ -122,79 +136,66 @@ func (rec steadyStateReconstruction) Reconstruction() [][]*float64 {
 
 // forwardMessagePassing is a utility function that performs the forward message passing
 // and updates the res vector
-func (rec steadyStateReconstruction) forwardMessagePassing(res []*mat.VecDense, wait *sync.WaitGroup, report chan<- int) {
+func (rec *steadyStateReconstruction) forwardMessagePassing(wait *sync.WaitGroup, report chan<- int) {
 	// upon completion tell wait group that you are done and close the report channel
-	defer close(report)
+	// defer close(report)
 	defer wait.Done()
 	// Forward recursion
-	for index := 0; index < len(res)-1; index++ {
+	for index := 0; index < rec.control.GetLength()-1; index++ {
 		// Increment the state
-		res[index+1].MulVec(&rec.Af, res[index])
-		for _, ctrl := range rec.control.GetForwardControlFilterContribution(index) {
-			// Check that vector interface is a mat.VecDense type
-			c, ok := ctrl.(*mat.VecDense)
-			// If not raise panic
-			if ok {
-				str := fmt.Sprintf("lacking implementation for type %T", ctrl)
-				panic(str)
-			}
-			// Add control contribution to current state
-			res[index+1].AddVec(res[index+1], c)
-			// Report back that state has been computed
-			report <- index + 1
+		rec.forwardMessage[index+1].MulVec(&rec.Af, &rec.forwardMessage[index])
+		ctrl, err := rec.control.GetBackwardControlFilterContribution(index)
+		if err != nil {
+			panic(err)
 		}
+		rec.forwardMessage[index+1].AddVec(&rec.forwardMessage[index+1], ctrl)
+		report <- index + 1
 	}
 }
 
 // backwardMessagePassing is a utility function that performs the backward message passing
 // and updates the corresponding res vector.
-func (rec steadyStateReconstruction) backwardMessagePassing(res []*mat.VecDense, wait *sync.WaitGroup, report chan<- int) {
+func (rec *steadyStateReconstruction) backwardMessagePassing(wait *sync.WaitGroup, report chan<- int) {
 	// upon completion tell wait group that you are done and close the report channel
 	defer wait.Done()
-	defer close(report)
+	// defer close(report)
 
 	// Backward recursion
-	for index := len(res) - 1; index > 0; index-- {
+	for index := rec.control.GetLength() - 1; index > 0; index-- {
 		// Increment the state
-		res[index-1].MulVec(&rec.Ab, res[index])
-		for _, ctrl := range rec.control.GetBackwardControlFilterContribution(index) {
-			// Check that vector interface is a mat.VecDense type
-			c, ok := ctrl.(*mat.VecDense)
-			// If not raise panic
-			if ok {
-				str := fmt.Sprintf("lacking implementation for type %T", ctrl)
-				panic(str)
-			}
-			// Add control contribution to current state
-			res[index-1].AddVec(res[index-1], c)
-			// Report back that state has been computed
-			report <- index - 1
+		rec.backwardMessage[index-1].MulVec(&rec.Ab, &rec.backwardMessage[index])
+		ctrl, err := rec.control.GetBackwardControlFilterContribution(index)
+		if err != nil {
+			panic(err)
 		}
+		rec.backwardMessage[index-1].AddVec(&rec.backwardMessage[index-1], ctrl)
+		report <- index - 1
+		// fmt.Printf("BackwardIndex %v\n", index-1)
 	}
 }
 
 // inputEstimate is a utility function that performs the last merging input estimation
 // by combining a forward and backward message into estimate.
-func (rec steadyStateReconstruction) inputEstimate(res []*float64, fm, bm *mat.VecDense, sync *sync.WaitGroup) {
+func (rec *steadyStateReconstruction) inputEstimate(resindex int, sync *sync.WaitGroup) {
 	// Report when function is done
 	defer sync.Done()
 	// constants
 	var (
-		tmp      mat.VecDense
+		tmp, res mat.VecDense
 		nrInputs int
-		tmpRes   float64
 	)
-	nrInputs = len(res)
+	_, nrInputs = rec.W.Dims()
 
 	// tmp = (fm - bm)
-	tmp.SubVec(fm, bm)
+	tmp.SubVec(&rec.forwardMessage[resindex], &rec.backwardMessage[resindex])
 	// tmp = W tmp
-	tmp.MulVec(&rec.W, &tmp)
+	// fmt.Printf("W^T = \n%v\ntmp = \n%v\n", mat.Formatted(rec.W.T()), mat.Formatted(&tmp))
+	res.MulVec(rec.W.T(), &tmp)
 	// Fill up result vector
 	for inp := 0; inp < nrInputs; inp++ {
-		tmpRes = tmp.AtVec(inp)
-		res[inp] = &tmpRes
+		rec.estimate[resindex][inp] = res.AtVec(inp)
 	}
+	// fmt.Printf("Computed Input estimate at index %v estimate = %v\n", resindex, rec.estimate[resindex])
 }
 
 // NewSteadyStateReconstructor returns a Steady-state reconstructor based on the
@@ -211,14 +212,15 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 
 	// variables
 	var (
-		inverseMeasurementNoiseCovariance *mat.Dense
+		inverseMeasurementNoiseCovariance mat.Dense
 		order                             int
-		ForwardStateDynamics              *mat.Dense
-		BackwardStateDynamics             *mat.Dense
-		tmpMatrix1                        *mat.Dense
-		tmpMatrix2                        *mat.Dense
-		W, Af, Ab                         *mat.Dense
-		Vf, Vb                            *mat.Dense
+		ForwardStateDynamics              mat.Dense
+		BackwardStateDynamics             mat.Dense
+		tmpMatrix1                        mat.Dense
+		tmpMatrix2                        mat.Dense
+		W, Af, Ab                         mat.Dense
+		Vf, Vb                            mat.Matrix
+		R                                 mat.Dense
 		rec                               steadyStateReconstruction
 	)
 
@@ -227,68 +229,111 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 
 	// Compute inverse measurement noise covariance
 	inverseMeasurementNoiseCovariance.Inverse(measurementNoiseCovariance)
-
 	// Solve forward and backward steady state covariance function
-	Vf = mat.NewDense(order, order, nil)
-	careOption := Recursion{
-		precision:  1e-9,
-		stepLength: 1e-4,
-	}
-	care(linearStateSpaceModel.A, linearStateSpaceModel.C, inverseMeasurementNoiseCovariance, inputNoiseCovariance, Vf, careOption)
+	Vf = gonumExtensions.Eye(order, order, 0)
+	// careOption := Recursion{
+	// 	precision:  1e-1,
+	// 	stepLength: 5e-6,
+	// }
 
+	R.Mul(&inverseMeasurementNoiseCovariance, linearStateSpaceModel.C.T())
+	R.Mul(linearStateSpaceModel.C, &R)
+
+	Vf = care(linearStateSpaceModel.A.T(), &R, inputNoiseCovariance, Vf, MatrixFactorization{})
 	// Backward recursion with sign changes
-	Vb = mat.NewDense(order, order, nil)
-	tmpMatrix2.Scale(-1, inverseMeasurementNoiseCovariance)
-	tmpMatrix1.Scale(-1, inputNoiseCovariance)
-	care(linearStateSpaceModel.A, linearStateSpaceModel.C, tmpMatrix1, tmpMatrix2, Vb, careOption)
+	Vb = gonumExtensions.Eye(order, order, 0)
+	tmpMatrix1.Scale(-1, linearStateSpaceModel.A.T())
 
-	// Reset sizes and clear memory
-	tmpMatrix1.Reset()
-	tmpMatrix2.Reset()
+	Vb = care(&tmpMatrix1, &R, inputNoiseCovariance, Vb, MatrixFactorization{})
+
+	fmt.Printf("Solution To ARE is:\nVf =\n%v\nVb\n%v\n", mat.Formatted(Vf), mat.Formatted(Vb))
 
 	// Compute state dynamics
 	// Forward: (A - Vf C Sigma_z^(-1) C^T )
 	// Backward: -(A + Vb C Sigma_z^(-1) C^T )
-	tmpMatrix2.Mul(inverseMeasurementNoiseCovariance, linearStateSpaceModel.C.T())
-	tmpMatrix1.Mul(linearStateSpaceModel.C, tmpMatrix2)
-	tmpMatrix2.Reset()
-	tmpMatrix2.Mul(Vf, tmpMatrix1)
-	ForwardStateDynamics.Sub(linearStateSpaceModel.A, tmpMatrix2)
+	tmpMatrix1.Mul(Vf, &R)
+	tmpMatrix2.Mul(Vb, &R)
 
-	tmpMatrix2.Reset()
-	tmpMatrix2.Mul(Vb, tmpMatrix1)
-	tmpMatrix2.Add(linearStateSpaceModel.A, tmpMatrix2)
-	BackwardStateDynamics.Scale(-1, tmpMatrix2)
+	ForwardStateDynamics.Sub(linearStateSpaceModel.A, &tmpMatrix1)
+
+	tmpMatrix2.Add(linearStateSpaceModel.A, &tmpMatrix2)
+	BackwardStateDynamics.Scale(-1, &tmpMatrix2)
+
+	fmt.Printf("Forward and Backward Filter Dynamics are:\nAdf = \n%v\nAdb = \n%v\n", mat.Formatted(&ForwardStateDynamics), mat.Formatted(&BackwardStateDynamics))
 
 	// Let control initialize the filter contributions
-	cont.PreComputeFilterContributions(ForwardStateDynamics, BackwardStateDynamics)
+	cont.PreComputeFilterContributions(&ForwardStateDynamics, &BackwardStateDynamics)
 
 	// Compute input estimate weights
 	tmpMatrix1.Reset()
 	tmpMatrix1.Add(Vf, Vb)
 
 	tmpMatrix2.Reset()
-	tmpMatrix2.Grow(order, len(linearStateSpaceModel.Input))
+	tmpMatrix2 = *mat.NewDense(order, linearStateSpaceModel.InputSpaceOrder(), nil)
+	// fmt.Printf("Input order %v and B vector \n%v\n", linearStateSpaceModel.InputSpaceOrder(), mat.Formatted(linearStateSpaceModel.Input[0].B))
 	for index, input := range linearStateSpaceModel.Input {
-		tmpMatrix2.SetCol(index, input.B.RawVector().Data)
+		for row := 0; row < order; row++ {
+			tmpMatrix2.Set(row, index, input.B.AtVec(row))
+		}
 	}
-	W.Solve(tmpMatrix1, tmpMatrix2)
+	W.Solve(&tmpMatrix1, &tmpMatrix2)
 
 	// Compute Af
-	Af.Scale(cont.GetTs(), ForwardStateDynamics)
-	Af.Exp(Af)
+	Af.Scale(cont.GetTs(), &ForwardStateDynamics)
+	Af.Exp(&Af)
 
 	// Compute Bf
-	Ab.Scale(cont.GetTs(), BackwardStateDynamics)
-	Ab.Exp(Ab)
+	Ab.Scale(cont.GetTs(), &BackwardStateDynamics)
+	Ab.Exp(&Ab)
+
+	fmt.Printf("PreComputed Matrix\nAf = \n%v\nAb = \n%v\n", mat.Formatted(&Af), mat.Formatted(&Ab))
 
 	// Initialize steady state reconstruction instance
 	rec = steadyStateReconstruction{
-		*Af,
-		*Ab,
-		*W,
-		cont,
+		Af:      Af,
+		Ab:      Ab,
+		W:       W,
+		control: cont,
 	}
 
 	return &rec
+}
+
+type SafeLedger struct {
+	ledger []bool
+	mux    sync.Mutex
+}
+
+func (c *SafeLedger) Get(index int) bool {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	return c.ledger[index]
+}
+
+func (c *SafeLedger) Set(index int) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	c.ledger[index] = true
+}
+
+// SafeCounter is safe to use concurrently.
+type SafeCounter struct {
+	v   int
+	mux sync.Mutex
+}
+
+// Inc increments the counter for the given key.
+func (c *SafeCounter) Get() int {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	return c.v
+}
+
+// Value returns the current value of the counter for the given key.
+func (c *SafeCounter) Dec(number int) {
+	c.mux.Lock()
+	// Lock so only one goroutine at a time can access the map c.v.
+	defer c.mux.Unlock()
+	c.v -= number
+	// fmt.Println(c.v)
 }

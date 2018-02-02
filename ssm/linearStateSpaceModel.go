@@ -28,18 +28,22 @@ type LinearStateSpaceModel struct {
 // of size N with input.
 func NewIntegratorChain(N int, stageGain float64, input []signal.VectorFunction) *LinearStateSpaceModel {
 	a := make([]float64, N*N)
-	c := make([]float64, N)
+	c := make([]float64, N*N)
 	stride := N
 	for row := 0; row < N; row++ {
-		c[row] = 1
+		c[row+row*stride] = 1
 		for column := 0; column < N; column++ {
 			if row == (column + 1) {
 				a[row*stride+column] = stageGain
 			}
+			if row == column {
+				a[row*stride+column] = 0.
+			}
 		}
 	}
+
 	A := mat.NewDense(N, N, a)
-	C := mat.NewDense(1, N, c)
+	C := mat.NewDense(N, N, c)
 	return NewLinearStateSpaceModel(A, C, input)
 }
 

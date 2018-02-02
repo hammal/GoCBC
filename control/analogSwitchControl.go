@@ -34,14 +34,16 @@ type AnalogSwitchControl struct {
 }
 
 // Simulate the simulation tool for integratorControl
-func (c *AnalogSwitchControl) Simulate() {
+func (c *AnalogSwitchControl) Simulate() [][]float64 {
 	var (
-		tmpCtrl   []mat.Vector
-		tmpState  *mat.Dense
+		tmpCtrl   mat.Vector
+		tmpState  mat.Dense
 		tmpSimRes mat.Matrix
 	)
 
-	tmpState = mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
+	res := make([][]float64, c.GetLength())
+
+	tmpState = *mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
 
 	for row := 0; row < c.StateSpaceModel.StateSpaceOrder(); row++ {
 		tmpState.Set(row, 0, c.state.AtVec(row))
@@ -60,26 +62,30 @@ func (c *AnalogSwitchControl) Simulate() {
 		// if the state space model was a linear model. Thus this could be realized
 		// using a pre-computed Ad=e^(A Ts) and then using the Runge-Kutta method
 		// with zero initial state.
-		tmpSimRes, _ = rk.Compute(t0, t1, tmpState, c.StateSpaceModel)
+		tmpSimRes, _ = rk.Compute(t0, t1, &tmpState, c.StateSpaceModel)
 		// Get the control contributions
 		tmpCtrl, _ = c.getControlSimulationContribution(index)
 		// Add the control contributions
 		// fmt.Printf("Simulation Contribution \n%v\n", mat.Formatted(tmpSimRes))
 
-		tmpState = mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
-		tmpState.Add(tmpState, tmpSimRes)
-		for _, tmpVec := range tmpCtrl {
-			// fmt.Printf("Control Contribution\n%v\n", mat.Formatted(tmpVec))
-			tmpState.Add(tmpState, tmpVec)
-		}
+		// tmpState = mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
+		tmpState.Add(tmpCtrl, tmpSimRes)
+		// fmt.Printf("Control Contribution\n%v\n", mat.Formatted(tmpVec))
+		// tmpState.Add(tmpState, tmpVec)
 
 		// fmt.Printf("State After \n%v\n", mat.Formatted(tmpState))
 
 		// Move increment to new time step
 		t0 += c.Ts
 		t1 += c.Ts
+
+		res[index] = make([]float64, c.StateSpaceModel.StateSpaceOrder())
+		for row := 0; row < c.StateSpaceModel.StateSpaceOrder(); row++ {
+			res[index][row] = tmpState.At(row, 0)
+		}
 	}
 	c.state = tmpState.ColView(0)
+	return res
 }
 
 // updateControl computes the control decisions for index based on the current
@@ -102,7 +108,7 @@ func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
 
 // GetControlSimulationContribution returns the control decision vector
 // for simulation.
-func (c *AnalogSwitchControl) getControlSimulationContribution(index int) ([]mat.Vector, error) {
+func (c *AnalogSwitchControl) getControlSimulationContribution(index int) (mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("Index out of range")
@@ -114,18 +120,18 @@ func (c *AnalogSwitchControl) getControlSimulationContribution(index int) ([]mat
 
 	// fmt.Printf("Number of controls = %v", c.NumberOfControls)
 
-	tmp := make([]mat.Vector, c.NumberOfControls)
+	tmp := mat.NewVecDense(c.StateSpaceModel.StateSpaceOrder(), nil)
 
 	// retrieve the precomputed vector for 	controlSimulateLookUp [][]mat.Vector [ #control][ decision]
 	var controlIndex, decision int
 	for controlIndex = 0; controlIndex < c.NumberOfControls; controlIndex++ {
 		decision = c.bits[index][controlIndex]
-		tmp[controlIndex] = c.controlSimulateLookUp[controlIndex][decision]
+		tmp.AddVec(tmp, c.controlSimulateLookUp[controlIndex][decision])
 	}
 	return tmp, nil
 }
 
-func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) ([]mat.Vector, error) {
+func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) (mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("index out of range")
@@ -135,18 +141,18 @@ func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) ([]m
 		return nil, errors.New("No pre-computed filter decisions.")
 	}
 
-	tmp := make([]mat.Vector, c.NumberOfControls)
+	tmp := mat.NewVecDense(c.StateSpaceModel.StateSpaceOrder(), nil)
 
 	// retrieve the precomputed vector for contolLookUp[ #control][ decision]
 	var controlIndex, decision int
 	for controlIndex = 0; controlIndex < c.NumberOfControls; controlIndex++ {
 		decision = c.bits[index][controlIndex]
-		tmp[controlIndex] = c.controlFilterLookUpForward[controlIndex][decision]
+		tmp.AddVec(tmp, c.controlFilterLookUpForward[controlIndex][decision])
 	}
 	return tmp, nil
 }
 
-func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) ([]mat.Vector, error) {
+func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) (mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("index out of range")
@@ -156,13 +162,13 @@ func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) ([]
 		return nil, errors.New("No pre-computed filter decisions.")
 	}
 
-	tmp := make([]mat.Vector, c.NumberOfControls)
+	tmp := mat.NewVecDense(c.StateSpaceModel.StateSpaceOrder(), nil)
 
 	// retrieve the precomputed vector for contolLookUp[ #control][ decision]
 	var controlIndex, decision int
 	for controlIndex = 0; controlIndex < c.NumberOfControls; controlIndex++ {
 		decision = c.bits[index][controlIndex]
-		tmp[controlIndex] = c.controlFilterLookUpBackward[controlIndex][decision]
+		tmp.AddVec(tmp, c.controlFilterLookUpBackward[controlIndex][decision])
 	}
 	return tmp, nil
 }
