@@ -2,6 +2,7 @@ package control
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/hammal/adc/ode"
 	"github.com/hammal/adc/signal"
@@ -66,14 +67,14 @@ func (c *AnalogSwitchControl) Simulate() [][]float64 {
 		// Get the control contributions
 		tmpCtrl, _ = c.getControlSimulationContribution(index)
 		// Add the control contributions
-		// fmt.Printf("Simulation Contribution \n%v\n", mat.Formatted(tmpSimRes))
+		fmt.Printf("Simulation Contribution \n%v\n", mat.Formatted(tmpSimRes))
 
 		// tmpState = mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
 		tmpState.Add(tmpCtrl, tmpSimRes)
-		// fmt.Printf("Control Contribution\n%v\n", mat.Formatted(tmpVec))
+		fmt.Printf("Control Contribution\n%v\n", mat.Formatted(tmpCtrl))
 		// tmpState.Add(tmpState, tmpVec)
 
-		// fmt.Printf("State After \n%v\n", mat.Formatted(tmpState))
+		fmt.Printf("State After \n%v\n", mat.Formatted(&tmpState))
 
 		// Move increment to new time step
 		t0 += c.Ts
@@ -93,10 +94,10 @@ func (c *AnalogSwitchControl) Simulate() [][]float64 {
 func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
 	// Set control bits
 	var tmp bool
-	// fmt.Printf("Decisions for \n%v\n => ", mat.Formatted(state))
+	fmt.Printf("Decisions for \n%v\n => ", mat.Formatted(state))
 	for i := 0; i < c.NumberOfControls; i++ {
 		tmp = state.AtVec(i) > 0
-		// fmt.Printf("%v, ", tmp)
+		fmt.Printf("%v, ", tmp)
 		if tmp {
 			c.bits[index][i] = 1
 		} else {
@@ -209,7 +210,7 @@ func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, bac
 		// fmt.Printf("Forward :\n%v\nNegation: \n%v\n", resFoward, negresForward)
 
 		systemBackward = ssm.NewLinearStateSpaceModel(backwardDynamics, backwardDynamics, input)
-		resBackward = c.PreCompute(systemBackward, 0, c.GetTs())
+		resBackward = c.PreCompute(systemBackward, c.GetTs(), 0)
 		negresBackward := mat.NewVecDense(c.StateSpaceModel.StateSpaceOrder(), nil)
 		negresBackward.ScaleVec(-1, resBackward)
 		c.controlFilterLookUpBackward[controlIndex][0] = negresBackward
@@ -270,7 +271,7 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 
 		tmp0.MulVec(Ad, controls[index])
 		tmp1.ScaleVec(-1, controls[index])
-		tmp1.MulVec(Ad, tmp0)
+		tmp1.MulVec(Ad, tmp1)
 		controlSimulateLookUp[index][0] = tmp1
 		controlSimulateLookUp[index][1] = tmp0
 

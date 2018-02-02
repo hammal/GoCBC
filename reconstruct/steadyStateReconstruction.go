@@ -68,13 +68,6 @@ func (rec *steadyStateReconstruction) Reconstruction() [][]float64 {
 	go rec.forwardMessagePassing(&wg, forwardReport)
 	go rec.backwardMessagePassing(&wg, backwardReport)
 
-	// Initialize result vector
-	res := make([][]float64, n)
-	numberOfEstimates, _ := rec.W.Dims()
-	for index := range res {
-		res[index] = make([]float64, numberOfEstimates)
-	}
-
 	// Keep track of what stages have been computed and commence input estimations if possible
 	//
 	// These are the two slices for keeping track.
@@ -131,7 +124,7 @@ func (rec *steadyStateReconstruction) Reconstruction() [][]float64 {
 
 	// Wait until all computations done
 	wg.Wait()
-	return res
+	return rec.estimate
 }
 
 // forwardMessagePassing is a utility function that performs the forward message passing
@@ -188,6 +181,8 @@ func (rec *steadyStateReconstruction) inputEstimate(resindex int, sync *sync.Wai
 
 	// tmp = (fm - bm)
 	tmp.SubVec(&rec.forwardMessage[resindex], &rec.backwardMessage[resindex])
+	// tmp.CopyVec(&rec.backwardMessage[resindex])
+	// tmp.CopyVec(&rec.forwardMessage[resindex])
 	// tmp = W tmp
 	// fmt.Printf("W^T = \n%v\ntmp = \n%v\n", mat.Formatted(rec.W.T()), mat.Formatted(&tmp))
 	res.MulVec(rec.W.T(), &tmp)
@@ -273,7 +268,7 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 	// fmt.Printf("Input order %v and B vector \n%v\n", linearStateSpaceModel.InputSpaceOrder(), mat.Formatted(linearStateSpaceModel.Input[0].B))
 	for index, input := range linearStateSpaceModel.Input {
 		for row := 0; row < order; row++ {
-			tmpMatrix2.Set(row, index, input.B.AtVec(row))
+			tmpMatrix2.Set(row, index, -input.B.AtVec(row))
 		}
 	}
 	W.Solve(&tmpMatrix1, &tmpMatrix2)
