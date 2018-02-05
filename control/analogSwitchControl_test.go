@@ -134,3 +134,30 @@ func TestAnalogSwitchControlSimulateAndGetFilterContributions(t *testing.T) {
 		// fmt.Printf(" for index %v \n", index)
 	}
 }
+
+func TestBitsToIndex(t *testing.T) {
+	indices := []int{1, 2, 3, 4, 5, 6}
+	bits := [][]int{{1}, {0, 1}, {1, 1}, {0, 0, 1}, {1, 0, 1}, {0, 1, 1}}
+
+	for index := range indices {
+		tmp := bitToIndex(bits[index])
+		fmt.Printf("tmp = %v\n", tmp)
+		if indices[index] != tmp {
+			t.Error(fmt.Sprintf("%v is not equal to %v\\n", indices[index], tmp))
+		}
+
+		tmp2 := indexToBits(indices[index])
+		fmt.Printf("tmp2 = %v\n", tmp2)
+		for index2 := range tmp2 {
+			if tmp2[index2] != bits[index][index2] {
+				t.Error(fmt.Sprintf("%v is not equal to %v\\n", tmp2, bits[index]))
+			}
+		}
+	}
+
+	for index := 100; index < 1000; index++ {
+		if index != bitToIndex(indexToBits(index)) {
+			t.Error("Not reversible")
+		}
+	}
+}

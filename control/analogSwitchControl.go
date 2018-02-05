@@ -209,16 +209,18 @@ func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, bac
 
 		// fmt.Printf("Forward :\n%v\nNegation: \n%v\n", resFoward, negresForward)
 
-		systemBackward = ssm.NewLinearStateSpaceModel(backwardDynamics, backwardDynamics, input)
-		resBackward = c.PreCompute(systemBackward, c.GetTs(), 0)
+		inputb := make([]signal.VectorFunction, 1)
+		inputb[0] = signal.VectorFunction{
+			B: controlFunction.B,
+			U: func(arg float64) float64 { return controlFunction.U(arg) },
+		}
+		systemBackward = ssm.NewLinearStateSpaceModel(backwardDynamics, backwardDynamics, inputb)
+		resBackward = c.PreCompute(systemBackward, c.GetTs(), 0.)
 		negresBackward := mat.NewVecDense(c.StateSpaceModel.StateSpaceOrder(), nil)
 		negresBackward.ScaleVec(-1, resBackward)
 		c.controlFilterLookUpBackward[controlIndex][0] = negresBackward
 		c.controlFilterLookUpBackward[controlIndex][1] = resBackward
 	}
-	// for index, _ := range controlSimulateLookUp {
-	// 	// Initialize a receive vector for each control bit
-	// 	controlSimulateLookUp[index] = make([]mat.Vector, 2)
 }
 
 func (c AnalogSwitchControl) PreCompute(system ode.DifferentiableSystem, from, to float64) mat.Vector {

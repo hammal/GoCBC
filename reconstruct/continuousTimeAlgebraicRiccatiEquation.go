@@ -15,7 +15,6 @@ type NewtonMethod struct {
 	precision float64
 }
 
-// TODO: Need to implement a faster way of computing steady states... This would be a good method to start with.
 type MatrixFactorization struct{}
 
 // care Computes the continuous algebraic Riccati equation as shown in [Optimal Solution to Matrix Riccati Equation – For Kalman Filter Implementation](http://cdn.intechopen.com/pdfs/39345/intech-optimal_solution_to_matrix_riccati_equation_for_kalman_filter_implementation.pdf).

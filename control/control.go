@@ -66,3 +66,29 @@ func zeroOrderHold(A mat.Matrix, t float64) mat.Matrix {
 	}
 	return res
 }
+
+// bitToIndex handy function to convert bit index array into unique index
+func bitToIndex(bits []int) int {
+	sum := 0
+	for index := range bits {
+		sum += (1 << uint(index)) * bits[index]
+	}
+	return sum
+}
+
+// inverse of bitToIndex
+func indexToBits(index int) []int {
+	sum := index
+	var count uint
+	for sum > 0 {
+		sum -= (1 << count)
+		count += 1
+	}
+	bits := make([]int, count)
+	for cont := range bits {
+		if ((index >> uint(cont)) & 1) > 0 {
+			bits[cont] = 1
+		}
+	}
+	return bits
+}

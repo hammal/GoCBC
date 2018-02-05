@@ -18,7 +18,7 @@ import (
 func TestNewSteadyStateReconstructor(t *testing.T) {
 	// runtime.GOMAXPROCS(3)
 	N := 7
-	beta := -6250.
+	beta := 6250.
 	b := mat.NewVecDense(N, nil)
 	b.SetVec(0, beta)
 	input := make([]signal.VectorFunction, 1)
@@ -26,7 +26,7 @@ func TestNewSteadyStateReconstructor(t *testing.T) {
 	input[0] = signal.NewInput(sig, b)
 	sm := ssm.NewIntegratorChain(N, beta, input)
 
-	Length := 500 * 3
+	Length := 500 * 10
 	ts := 1. / 16000.
 	t0 := 0.
 	controls := make([]mat.Vector, N)
@@ -43,7 +43,7 @@ func TestNewSteadyStateReconstructor(t *testing.T) {
 
 	var inputNoiseCovariance, measurementNoiseCovariance mat.Dense
 
-	sigma_u2 := 1e0
+	sigma_u2 := 1e-8
 	sigma_z2 := 1e0
 	inputNoiseCovariance.Outer(sigma_u2, b, b)
 	measurementNoiseCovariance.Mul(sm.C, sm.C.T())
@@ -72,6 +72,9 @@ func TestNewSteadyStateReconstructor(t *testing.T) {
 
 	fmt.Println("Results are")
 	for index, term := range res {
+		for index2 := range res[index] {
+			res[index][index2] *= sigma_u2
+		}
 		fmt.Printf("S=%v, E=%v\n", sig(float64(index)*ts), term[0])
 	}
 

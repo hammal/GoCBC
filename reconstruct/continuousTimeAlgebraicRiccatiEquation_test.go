@@ -210,10 +210,10 @@ func TestForDavisionAndMakiPaper(t *testing.T) {
 // }
 
 func TestCompareMathematica(t *testing.T) {
-	N := 14
+	N := 2
 	stageGain := 1000.
-	sigma_u := 1e-3
-	sigma_z := 1e-3
+	sigma_u := 1e-6
+	sigma_z := 1e-0
 	vec := make([]float64, N)
 	vec[0] = stageGain
 	B := mat.NewVecDense(N, vec)

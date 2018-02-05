@@ -137,7 +137,7 @@ func (rec *steadyStateReconstruction) forwardMessagePassing(wait *sync.WaitGroup
 	for index := 0; index < rec.control.GetLength()-1; index++ {
 		// Increment the state
 		rec.forwardMessage[index+1].MulVec(&rec.Af, &rec.forwardMessage[index])
-		ctrl, err := rec.control.GetBackwardControlFilterContribution(index)
+		ctrl, err := rec.control.GetForwardControlFilterContribution(index)
 		if err != nil {
 			panic(err)
 		}
@@ -157,7 +157,7 @@ func (rec *steadyStateReconstruction) backwardMessagePassing(wait *sync.WaitGrou
 	for index := rec.control.GetLength() - 1; index > 0; index-- {
 		// Increment the state
 		rec.backwardMessage[index-1].MulVec(&rec.Ab, &rec.backwardMessage[index])
-		ctrl, err := rec.control.GetBackwardControlFilterContribution(index)
+		ctrl, err := rec.control.GetBackwardControlFilterContribution(index - 1)
 		if err != nil {
 			panic(err)
 		}
@@ -181,6 +181,9 @@ func (rec *steadyStateReconstruction) inputEstimate(resindex int, sync *sync.Wai
 
 	// tmp = (fm - bm)
 	tmp.SubVec(&rec.forwardMessage[resindex], &rec.backwardMessage[resindex])
+	// tmp.AddVec(&rec.forwardMessage[resindex], &rec.backwardMessage[resindex])
+	// tmp = rec.backwardMessage[resindex]
+	// tmp = rec.forwardMessage[resindex]
 	// tmp.CopyVec(&rec.backwardMessage[resindex])
 	// tmp.CopyVec(&rec.forwardMessage[resindex])
 	// tmp = W tmp
@@ -245,7 +248,7 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 
 	// Compute state dynamics
 	// Forward: (A - Vf C Sigma_z^(-1) C^T )
-	// Backward: -(A + Vb C Sigma_z^(-1) C^T )
+	// Backward: (A + Vb C Sigma_z^(-1) C^T )
 	tmpMatrix1.Mul(Vf, &R)
 	tmpMatrix2.Mul(Vb, &R)
 
