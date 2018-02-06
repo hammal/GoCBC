@@ -23,4 +23,6 @@ type StateSpaceModel interface {
 	ObservationSpaceOrder() int
 	// Returns the input space Order
 	InputSpaceOrder() int
+	// General Order
+	Order() int
 }

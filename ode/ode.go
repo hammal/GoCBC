@@ -19,6 +19,7 @@ import (
 // defined in this package.
 type DifferentiableSystem interface {
 	Derivative(t float64, state mat.Vector) mat.Vector
+	Order() int
 }
 
 // RungeKutta holds the butcherTableau which describes the Runge Kutta method.

@@ -9,6 +9,8 @@ type NumericalIntegration struct {
 	derivative signal.Signal
 }
 
+func (ni NumericalIntegration) Order() int { return 1 }
+
 func (nI NumericalIntegration) Derivative(time float64, state mat.Vector) mat.Vector {
 	return nI.derivative.Value(time)
 }

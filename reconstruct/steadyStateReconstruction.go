@@ -248,7 +248,7 @@ func NewSteadyStateReconstructor(cont control.Control, measurementNoiseCovarianc
 
 	// Compute state dynamics
 	// Forward: (A - Vf C Sigma_z^(-1) C^T )
-	// Backward: (A + Vb C Sigma_z^(-1) C^T )
+	// Backward: -(A + Vb C Sigma_z^(-1) C^T )
 	tmpMatrix1.Mul(Vf, &R)
 	tmpMatrix2.Mul(Vb, &R)
 

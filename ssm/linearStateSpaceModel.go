@@ -58,8 +58,16 @@ func NewLinearStateSpaceModel(A, C mat.Matrix, input []signal.VectorFunction) *L
 	}
 	// Check that input dimensions match
 
-	sys := LinearStateSpaceModel{A, C, input}
+	sys := LinearStateSpaceModel{
+		A:     A,
+		C:     C,
+		Input: input,
+	}
 	return &sys
+}
+
+func (model LinearStateSpaceModel) Order() int {
+	return model.StateSpaceOrder()
 }
 
 // Derivative returns the state derivative.

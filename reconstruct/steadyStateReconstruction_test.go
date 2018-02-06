@@ -43,7 +43,7 @@ func TestNewSteadyStateReconstructor(t *testing.T) {
 
 	var inputNoiseCovariance, measurementNoiseCovariance mat.Dense
 
-	sigma_u2 := 1e-8
+	sigma_u2 := 1e-0
 	sigma_z2 := 1e0
 	inputNoiseCovariance.Outer(sigma_u2, b, b)
 	measurementNoiseCovariance.Mul(sm.C, sm.C.T())
@@ -67,7 +67,7 @@ func TestNewSteadyStateReconstructor(t *testing.T) {
 		// }
 		fmt.Printf("Which results in the contribution\n%v \n", mat.Formatted(controlDesc))
 
-		// fmt.Printf(" for index %v \n", index)
+		fmt.Printf(" for index %v \n", index)
 	}
 
 	fmt.Println("Results are")
@@ -105,6 +105,8 @@ func TestNewSteadyStateReconstructor(t *testing.T) {
 	if err := p.Save(4*vg.Inch, 4*vg.Inch, "points.eps"); err != nil {
 		panic(err)
 	}
+
+	fmt.Printf("Res length = %v\n", len(res))
 
 }
 

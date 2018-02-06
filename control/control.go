@@ -27,6 +27,12 @@ type Control interface {
 	GetTs() float64
 }
 
+// Cache interface is an abstraction that is heavily used when precomputing
+// lookup tables.
+type ControlVector interface {
+	GetVector(uint) mat.Vector
+}
+
 // zeroOrderHold solves the problem
 // int_0^T_s e^(A(T_s - t)) dt
 // by solving the initial value problem
@@ -68,8 +74,8 @@ func zeroOrderHold(A mat.Matrix, t float64) mat.Matrix {
 }
 
 // bitToIndex handy function to convert bit index array into unique index
-func bitToIndex(bits []int) int {
-	sum := 0
+func bitToIndex(bits []uint) uint {
+	var sum uint = 0
 	for index := range bits {
 		sum += (1 << uint(index)) * bits[index]
 	}
@@ -77,18 +83,21 @@ func bitToIndex(bits []int) int {
 }
 
 // inverse of bitToIndex
-func indexToBits(index int) []int {
-	sum := index
-	var count uint
-	for sum > 0 {
-		sum -= (1 << count)
-		count += 1
-	}
-	bits := make([]int, count)
+func indexToBits(index uint, length int) []uint {
+	bits := make([]uint, length)
 	for cont := range bits {
 		if ((index >> uint(cont)) & 1) > 0 {
 			bits[cont] = 1
 		}
 	}
 	return bits
+}
+
+func indexToVec(index uint, length int) mat.Vector {
+	bits := indexToBits(index, length)
+	res := make([]float64, length)
+	for bit := range bits {
+		res[bit] = float64(bits[bit]*2 - 1)
+	}
+	return mat.NewVecDense(length, res)
 }
