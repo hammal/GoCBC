@@ -250,15 +250,6 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 	// Create decision table
 	bits := make([]uint, length)
 
-	// Decision Simulation Lookup table
-	// var tmp0, tmp1 *mat.VecDense
-	// Compute e^(A Ts)
-	// Ad := zeroOrderHold(StateSpaceModel.A, ts)
-	// fmt.Println("Ad: ")
-	// fmt.Println(mat.Formatted(Ad))
-
-	// Create decision Simulation lookup table
-
 	analogswitch := analogSwitch{
 		systemDynamics: StateSpaceModel.A,
 		controls:       ctrl,
@@ -273,22 +264,6 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 		computed: tmpBool,
 		cache:    tmpVec,
 	}
-	// for index, _ := range controlSimulateLookUp {
-	// 	ctrlFunction, _ :=
-
-	// Initialize a receive vector for each control bit
-	// controlSimulateLookUp[index] = make([]mat.Vector, 2)
-	//
-	// tmp0 := mat.NewVecDense(order, nil)
-	// tmp1 := mat.NewVecDense(order, nil)
-	//
-	// tmp0.MulVec(Ad, controls[index])
-	// tmp1.ScaleVec(-1, controls[index])
-	// tmp1.MulVec(Ad, tmp1)
-	// controlSimulateLookUp[index][0] = tmp1
-	// controlSimulateLookUp[index][1] = tmp0
-
-	// }
 
 	return &AnalogSwitchControl{
 		NumberOfControls:      numberOfControls,
@@ -302,25 +277,6 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 	}
 
 }
-
-// func (c AnalogSwitchControl) computeControlFunctions(index int) ([]signal.VectorFunction, []signal.VectorFunction) {
-// 	ctrlBits := indexToBits(index, c.NumberOfControls)
-// 	ctrlf := make([]signal.VectorFunction, c.NumberOfControls)
-// 	ctrlb := make([]signal.VectorFunction, c.NumberOfControls)
-//
-// 	for controlIndex, controlFunction := range c.controls {
-// 		ctrlf[controlIndex] = signal.VectorFunction{
-// 			B: controlFunction.B,
-// 			U: func(arg float64) float64 { return float64(2*ctrlBits[controlIndex]-1) * controlFunction.U(arg) },
-// 		}
-// 		ctrlb[controlIndex] = signal.VectorFunction{
-// 			B: controlFunction.B,
-// 			U: func(arg float64) float64 { return -float64(2*ctrlBits[controlIndex]-1) * controlFunction.U(arg) },
-// 		}
-// 	}
-//
-// 	return ctrlf, ctrlb
-// }
 
 type analogSwitch struct {
 	systemDynamics mat.Matrix
@@ -348,51 +304,9 @@ func (as analogSwitch) GetVector(controlCode uint) mat.Vector {
 			B: &tmpVec,
 			U: controlFunction.U,
 		}
-		// fmt.Printf("%v and function value at t=0 %v\n", mat.Formatted(ctrlFunction[controlIndex].B), ctrlFunction[controlIndex].U)
-		// fmt.Printf("As such this is Bu(t=3)\n%v\n", mat.Formatted(ctrlFunction[controlIndex].Bu(3.)))
 	}
 
 	M, _ := as.systemDynamics.Dims()
 	linearSystemModel := ssm.NewLinearStateSpaceModel(as.systemDynamics, gonumExtensions.Eye(M, M, 0), ctrlFunction)
-	// fmt.Println("Result from Get vector analog switch")
-	// fmt.Println(mat.Formatted(linearSystemModel.A))
-	// for _, function := range linearSystemModel.Input {
-	// 	fmt.Print(function.U)
-	// 	fmt.Println(function.B)
-	// }
 	return Solve(linearSystemModel, 0, as.Ts)
-}
-
-func Solve(system ode.DifferentiableSystem, from, to float64) mat.Vector {
-	o := ode.NewFehlberg45()
-	value := mat.NewDense(system.Order(), 1, nil)
-	res, _ := o.Compute(from, to, value, system)
-	res2 := res.(*mat.Dense)
-	// fmt.Printf("Derivative at t=3 is \n%v\n", mat.Formatted(system.Derivative(3, mat.NewVecDense(system.Order(), nil))))
-	// fmt.Printf("Solution of Solve is \n%v\n", mat.Formatted(res))
-	return res2.ColView(0)
-}
-
-type lazyCache struct {
-	cache    []mat.Vector
-	computed []bool
-	aSwitch  analogSwitch
-}
-
-func (lc *lazyCache) GetVector(codeWord uint) mat.Vector {
-	// Check if in cache
-	if lc.computed[codeWord] {
-		// If so return cache
-		fmt.Printf("%v in cache\n", codeWord)
-		return lc.cache[codeWord]
-	} else {
-		fmt.Printf("%v not in cache\n", codeWord)
-		// Compute cache element
-		lc.cache[codeWord] = lc.aSwitch.GetVector(codeWord)
-		fmt.Printf("Computed vector \n%v\n", mat.Formatted(lc.cache[codeWord]))
-		// Set cache index to true
-		lc.computed[codeWord] = true
-		// Recursively call yourself
-		return lc.GetVector(codeWord)
-	}
 }
