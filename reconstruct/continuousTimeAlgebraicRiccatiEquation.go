@@ -140,7 +140,7 @@ func care(A, R, Q, X mat.Matrix, method interface{}) mat.Matrix {
 		tmpX.Mul(U_2, &tmpX)
 
 		// Check if negative definite
-		if mat.Det(&tmpX) < 0 {
+		if mat.Trace(&tmpX) < 0 {
 			// If so make positive definite
 			tmpX.Scale(-1, &tmpX)
 		}

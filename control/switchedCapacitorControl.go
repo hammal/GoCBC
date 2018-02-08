@@ -11,9 +11,12 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+var R float64 = 100.
+var C float64 = 100e-6
+
 // AnalogSwitchControl is the implementation of control with
 // open analog switches.
-type AnalogSwitchControl struct {
+type SwitchedCapacitorControl struct {
 	// Number of controls
 	NumberOfControls int
 	// Controls
@@ -27,7 +30,7 @@ type AnalogSwitchControl struct {
 	// Initial state
 	state mat.Vector
 	// State space model
-	StateSpaceModel ssm.StateSpaceModel
+	StateSpaceModel *ssm.LinearStateSpaceModel
 	// precomputed control decision vectors for simulation
 	controlSimulateLookUp ControlVector
 	// precomputed control decision vectors for filtering
@@ -36,7 +39,7 @@ type AnalogSwitchControl struct {
 }
 
 // Simulate the simulation tool for integratorControl
-func (c *AnalogSwitchControl) Simulate() [][]float64 {
+func (c *SwitchedCapacitorControl) Simulate() [][]float64 {
 	var (
 		tmpCtrl   mat.Vector
 		tmpState  mat.Dense
@@ -47,6 +50,8 @@ func (c *AnalogSwitchControl) Simulate() [][]float64 {
 
 	res := make([][]float64, c.GetLength())
 
+	fmt.Println(c.StateSpaceModel.StateSpaceOrder())
+	fmt.Println(mat.Formatted(c.StateSpaceModel.A))
 	tmpState = *mat.NewDense(c.StateSpaceModel.StateSpaceOrder(), 1, nil)
 
 	for row := 0; row < c.StateSpaceModel.StateSpaceOrder(); row++ {
@@ -77,7 +82,7 @@ func (c *AnalogSwitchControl) Simulate() [][]float64 {
 		// fmt.Printf("Control Contribution\n%v\n", mat.Formatted(tmpCtrl))
 		// tmpState.Add(tmpState, tmpVec)
 
-		// fmt.Printf("State After \n%v\n", mat.Formatted(&tmpState))
+		fmt.Printf("State After \n%v\n", mat.Formatted(&tmpState))
 
 		// Move increment to new time step
 		t0 += c.Ts
@@ -94,7 +99,7 @@ func (c *AnalogSwitchControl) Simulate() [][]float64 {
 
 // updateControl computes the control decisions for index based on the current
 // state, held in the reviver type.
-func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
+func (c *SwitchedCapacitorControl) updateControl(state mat.Vector, index int) {
 	// Set control bits
 	var tmp bool
 	bits := make([]uint, c.NumberOfControls)
@@ -113,7 +118,7 @@ func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
 
 // GetControlSimulationContribution returns the control decision vector
 // for simulation.
-func (c *AnalogSwitchControl) getControlSimulationContribution(index int) (mat.Vector, error) {
+func (c *SwitchedCapacitorControl) getControlSimulationContribution(index int) (mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("Index out of range")
@@ -138,7 +143,7 @@ func (c *AnalogSwitchControl) getControlSimulationContribution(index int) (mat.V
 	return tmp, nil
 }
 
-func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) (mat.Vector, error) {
+func (c SwitchedCapacitorControl) GetForwardControlFilterContribution(index int) (mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("index out of range")
@@ -153,7 +158,7 @@ func (c AnalogSwitchControl) GetForwardControlFilterContribution(index int) (mat
 	return tmp, nil
 }
 
-func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) (mat.Vector, error) {
+func (c SwitchedCapacitorControl) GetBackwardControlFilterContribution(index int) (mat.Vector, error) {
 	// Check that index exists
 	if index < 0 || index > c.GetLength()-1 {
 		return nil, errors.New("index out of range")
@@ -168,17 +173,17 @@ func (c AnalogSwitchControl) GetBackwardControlFilterContribution(index int) (ma
 }
 
 // GetLength returns the length of control (number of time samples)
-func (c AnalogSwitchControl) GetLength() int {
+func (c SwitchedCapacitorControl) GetLength() int {
 	return len(c.bits)
 }
 
 // GetTs returns the sample period
-func (c AnalogSwitchControl) GetTs() float64 { return c.Ts }
+func (c SwitchedCapacitorControl) GetTs() float64 { return c.Ts }
 
-func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix) {
+func (c *SwitchedCapacitorControl) PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix) {
 	numberOfControlScenarios := (2 << uint(c.NumberOfControls))
 
-	analogswitchForward := analogSwitch{
+	analogswitchForward := capacativeSwitch{
 		systemDynamics: forwardDynamics,
 		controls:       c.controls,
 		Ts:             c.GetTs(),
@@ -198,7 +203,7 @@ func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, bac
 		}
 	}
 
-	analogswitchBackward := analogSwitch{
+	analogswitchBackward := capacativeSwitch{
 		systemDynamics: backwardDynamics,
 		controls:       negatedControls,
 		Ts:             c.GetTs(),
@@ -228,30 +233,32 @@ func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, bac
 }
 
 // Returns an initialized analog switch control
-func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, state mat.Vector, StateSpaceModel *ssm.LinearStateSpaceModel) *AnalogSwitchControl {
-	// IDEA Change controls to reflect resistance values
+func NewSwitchedCapacitorControl(length int, controls []SwitchedCapacitor, ts, t0 float64, state mat.Vector, StateSpaceModel *ssm.LinearStateSpaceModel) *SwitchedCapacitorControl {
 	order := StateSpaceModel.StateSpaceOrder()
 	numberOfControls := len(controls)
 	ctrl := make([]signal.VectorFunction, numberOfControls)
+	// inputs := make([]signal.VectorFunction, len(StateSpaceModel.Input))
 
-	// Construct default controls
 	for index := range controls {
-		ctrl[index] = signal.NewInput(func(arg1 float64) float64 { return 1. }, controls[index])
+		ctrl[index] = signal.VectorFunction{
+			U: func(float64) float64 { return 0 },
+			B: controls[index].B,
+		}
 	}
 
 	// If state is an nil pointer initialize a new zero vector.
 	st, ok := state.(*mat.VecDense)
 	if !ok {
-		st = mat.NewVecDense(order, nil)
+		st = mat.NewVecDense(order+numberOfControls, nil)
 		// state = st
 	}
 
-	numberOfPossibleControlCombinations := (2 << uint(numberOfControls))
+	numberOfPossibleControlCombinations := (1 << uint(numberOfControls))
 
 	// Create decision table
 	bits := make([]uint, length)
 
-	analogswitch := analogSwitch{
+	analogswitch := capacativeSwitch{
 		systemDynamics: StateSpaceModel.A,
 		controls:       ctrl,
 		Ts:             ts,
@@ -266,7 +273,7 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 		cache:    tmpVec,
 	}
 
-	return &AnalogSwitchControl{
+	return &SwitchedCapacitorControl{
 		NumberOfControls:      numberOfControls,
 		controls:              ctrl,
 		Ts:                    ts,
@@ -279,35 +286,116 @@ func NewAnalogSwitchControl(length int, controls []mat.Vector, ts, t0 float64, s
 
 }
 
-type analogSwitch struct {
+// SwitchedCapacitor describes the SC circuit
+// associated with each control. The R and C value
+// Sets the decay rate i.e.
+// dV/dt = - V/RC
+// Furthermore, the B steering vector additionally considers the
+// 1/R C_integrator of the integrator.
+type SwitchedCapacitor struct {
+	R, C float64
+	B    mat.Vector
+}
+
+type capacativeSwitch struct {
 	systemDynamics mat.Matrix
 	controls       []signal.VectorFunction
 	Ts             float64
 }
 
-func (as analogSwitch) GetVector(controlCode uint) mat.Vector {
+func (as capacativeSwitch) GetVector(controlCode uint) mat.Vector {
 
 	ctrlBits := indexToBits(controlCode, len(as.controls))
-	ctrlFunction := make([]signal.VectorFunction, len(as.controls))
 
-	// fmt.Printf("Control bits: %v\n", ctrlBits)
+	order, _ := as.systemDynamics.Dims()
+	numberOfControls := len(as.controls)
 
-	for controlIndex, controlFunction := range as.controls {
+	ctrl := make([]signal.VectorFunction, numberOfControls)
+
+	// Construct additional states for the SC memory
+	scValues := make([]float64, numberOfControls)
+	scControlConnection := mat.NewDense(order, numberOfControls, nil)
+
+	for index := range scValues {
+		scValues[index] = -1. / (C * R)
+		for row := 0; row < order; row++ {
+			scControlConnection.Set(row, index, as.controls[index].B.AtVec(row))
+		}
+	}
+	scStates := mat.NewDiagonal(numberOfControls, scValues)
+
+	var Anew, tmpMat1, tmpMat2 mat.Dense
+	tmpMat1.Augment(as.systemDynamics, scControlConnection)
+	tmpMat2.Augment(mat.NewDense(numberOfControls, order, nil), scStates)
+	Anew.Stack(&tmpMat1, &tmpMat2)
+	// var Cnew mat.Dense
+	// tmpMat1.Reset()
+	// tmpMat1.Augment(StateSpaceModel.C, mat.NewDense(order, numberOfControls, nil))
+	// tmpMat2.Scale(0, &tmpMat2)
+	// Cnew.Stack(&tmpMat1, &tmpMat2)
+	// Cnew := gonumExtensions.Eye(order+numberOfControls, order+numberOfControls, 0)
+
+	// fmt.Println(mat.Formatted(&Anew))
+	// fmt.Println(mat.Formatted(&Cnew))
+
+	// Construct default controls
+	for index := range as.controls {
+		tmpVec := mat.NewVecDense(order+numberOfControls, nil)
+		for row := 0; row < numberOfControls; row++ {
+			tmpVec.SetVec(row+order, as.controls[index].B.AtVec(row))
+		}
+		ctrl[index] = signal.NewInput(func(arg1 float64) float64 { return 0. }, tmpVec)
+	}
+
+	// Adjust inputs
+	// for index := range StateSpaceModel.Input {
+	// 	tmpVec := mat.NewVecDense(order+numberOfControls, nil)
+	// 	for row := 0; row < order; row++ {
+	// 		tmpVec.SetVec(row, as.controls[index].B.AtVec(row))
+	// 	}
+	// 	inputs[index] = signal.VectorFunction{
+	// 		U: as.controls[index].U,
+	// 		B: tmpVec,
+	// 	}
+	// }
+
+	// NewSSM := ssm.NewLinearStateSpaceModel(&Anew, Cnew, inputs)
+
+	controlState := mat.NewDense(order+numberOfControls, 1, nil)
+
+	for controlIndex, controlFunction := range ctrl {
 		ctrlDecision := (2.*float64(ctrlBits[controlIndex]) - 1.)
 
 		// This is a ugly solution since I can't redefine controlFunction.U
 		// Because if so they overlap in memory instead I ended up scaling the whole
 		// B vector with the control decision.
 		var tmpVec mat.VecDense
-		tmpVec.ScaleVec(ctrlDecision, controlFunction.B)
+		tmpVec.ScaleVec(ctrlDecision, unityVector(controlFunction.B))
 
-		ctrlFunction[controlIndex] = signal.VectorFunction{
-			B: &tmpVec,
-			U: controlFunction.U,
-		}
+		controlState.Add(controlState, &tmpVec)
+	}
+	dummyInput := make([]signal.VectorFunction, 1)
+	dummyInput[0] = signal.VectorFunction{
+		B: ctrl[0].B,
+		U: func(arg float64) float64 { return 0. },
 	}
 
-	M, _ := as.systemDynamics.Dims()
-	linearSystemModel := ssm.NewLinearStateSpaceModel(as.systemDynamics, gonumExtensions.Eye(M, M, 0), ctrlFunction)
-	return Solve(linearSystemModel, 0, as.Ts, nil)
+	linearSystemModel := ssm.NewLinearStateSpaceModel(&Anew, gonumExtensions.Eye(order+numberOfControls, order+numberOfControls, 0), dummyInput)
+
+	tmpRes := Solve(linearSystemModel, 0, as.Ts, controlState)
+	// Now as this is an approximate solution the states assosiated with then
+	// capacitors needs to be drained as they would if implemented as an SC-circuit.
+	res := mat.NewVecDense(order+numberOfControls, nil)
+	for index := 0; index < order; index++ {
+		res.SetVec(index, tmpRes.AtVec(index))
+	}
+	return res.SliceVec(0, order)
+}
+
+func unityVector(vector mat.Vector) mat.Vector {
+	var tmpVec mat.VecDense
+	tmpVec.MulElemVec(vector, vector)
+	norm := mat.Norm(&tmpVec, 1)
+	tmpVec.ScaleVec(1./norm, &tmpVec)
+	return &tmpVec
 }

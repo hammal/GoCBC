@@ -15,7 +15,7 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-func TestNewSteadyStateReconstructor(t *testing.T) {
+func TestNewSteadyStateReconstructorAnalogSwitch(t *testing.T) {
 	// runtime.GOMAXPROCS(3)
 	N := 7
 	beta := 6250.
@@ -102,7 +102,107 @@ func TestNewSteadyStateReconstructor(t *testing.T) {
 	}
 
 	// Save the plot to a PNG file.
-	if err := p.Save(4*vg.Inch, 4*vg.Inch, "points.eps"); err != nil {
+	if err := p.Save(4*vg.Inch, 4*vg.Inch, "AnalogSwitchReconstruction.eps"); err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Res length = %v\n", len(res))
+
+}
+
+func TestNewSteadyStateReconstructorSwitchedCapactior(t *testing.T) {
+	// runtime.GOMAXPROCS(3)
+	N := 2
+	beta := 6250.
+	b := mat.NewVecDense(N, nil)
+	b.SetVec(0, beta)
+	input := make([]signal.VectorFunction, 1)
+	sig := func(arg1 float64) float64 { return math.Sin(math.Pi*2.*arg1*10. + 0.345) }
+	input[0] = signal.NewInput(sig, b)
+	sm := ssm.NewIntegratorChain(N, beta, input)
+
+	Length := 5000
+	ts := 1. / 16000.
+	t0 := 0.
+	controls := make([]control.SwitchedCapacitor, N)
+	for index := range controls {
+		tmp := mat.NewVecDense(N, nil)
+		tmp.SetVec(index, -math.Abs(beta))
+		controls[index] = control.SwitchedCapacitor{
+			// These have no effect
+			R: 0,
+			C: 0,
+			B: tmp,
+		}
+	}
+
+	// state := mat.NewVecDense(N, nil)
+	ctrl := control.NewSwitchedCapacitorControl(Length, controls, ts, t0, nil, sm)
+	fmt.Println("Simulating")
+	ctrl.Simulate()
+
+	var inputNoiseCovariance, measurementNoiseCovariance mat.Dense
+
+	sigma_u2 := 1e-0
+	sigma_z2 := 1e0
+	inputNoiseCovariance.Outer(sigma_u2, ctrl.StateSpaceModel.Input[0].B, ctrl.StateSpaceModel.Input[0].B)
+	measurementNoiseCovariance.Mul(ctrl.StateSpaceModel.C, ctrl.StateSpaceModel.C.T())
+	measurementNoiseCovariance.Scale(sigma_z2, &measurementNoiseCovariance)
+
+	fmt.Printf("Measurment Noise matrix \n%v\n", mat.Formatted(&measurementNoiseCovariance))
+	fmt.Println("PreComputing Reconstruction")
+	rec := NewSteadyStateReconstructor(ctrl, &measurementNoiseCovariance, &inputNoiseCovariance, *ctrl.StateSpaceModel)
+	fmt.Println("Reconstructing")
+	res := rec.Reconstruction()
+
+	fmt.Println("Forward filter contributions")
+	// for index := 0; index < ctrl.GetLength(); index++ {
+	// 	controlDesc, err := ctrl.GetForwardControlFilterContribution(index)
+	// 	// controlDesc, err = ctrl.GetBackwardControlFilterContribution(index)
+	// 	if err != nil {
+	// 		t.Error(err)
+	// 	}
+	// 	// for controlIndex, bits := range ctrl.bits[index] {
+	// 	// 	fmt.Printf("%v for control %v\n", bits, controlIndex)
+	// 	// }
+	// 	fmt.Printf("Which results in the contribution\n%v \n", mat.Formatted(controlDesc))
+	//
+	// 	fmt.Printf(" for index %v \n", index)
+	// }
+
+	fmt.Println("Results are")
+	for index, term := range res {
+		for index2 := range res[index] {
+			res[index][index2] *= sigma_u2
+		}
+		fmt.Printf("S=%v, E=%v\n", sig(float64(index)*ts), term[0])
+	}
+
+	sigsig := make([][]float64, Length)
+	for index := range sigsig {
+		sigsig[index] = []float64{sig(float64(index) * ts)}
+	}
+
+	// Plotting
+	p, err := plot.New()
+	if err != nil {
+		panic(err)
+	}
+
+	p.Title.Text = "Estimation Comparison for Visual aid"
+	p.X.Label.Text = "index"
+	p.Y.Label.Text = "."
+
+	err = plotutil.AddLines(p,
+		"Estimate", plottify(res)[0],
+		"Signal", plottify(sigsig)[0],
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// Save the plot to a PNG file.
+	if err := p.Save(4*vg.Inch, 4*vg.Inch, "SwitchedCapacitorReconstructionEstimation.eps"); err != nil {
 		panic(err)
 	}
 

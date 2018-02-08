@@ -58,10 +58,15 @@ func (lc *lazyCache) GetVector(codeWord uint) mat.Vector {
 	}
 }
 
-func Solve(system ode.DifferentiableSystem, from, to float64) mat.Vector {
+func Solve(system ode.DifferentiableSystem, from, to float64, initalState mat.Matrix) mat.Vector {
 	o := ode.NewFehlberg45()
-	value := mat.NewDense(system.Order(), 1, nil)
-	res, _ := o.Compute(from, to, value, system)
+	var res mat.Matrix
+	if initalState == nil {
+		value := mat.NewDense(system.Order(), 1, nil)
+		res, _ = o.Compute(from, to, value, system)
+	} else {
+		res, _ = o.Compute(from, to, initalState, system)
+	}
 	res2 := res.(*mat.Dense)
 	// fmt.Printf("Derivative at t=3 is \n%v\n", mat.Formatted(system.Derivative(3, mat.NewVecDense(system.Order(), nil))))
 	// fmt.Printf("Solution of Solve is \n%v\n", mat.Formatted(res))

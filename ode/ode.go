@@ -132,10 +132,15 @@ func (rk RungeKutta) computeVec(from, to float64, value mat.Vector, system Diffe
 		// compute e^(AT_s) and move state forward
 		var tmpMatrix mat.Dense
 		tmpMatrix.Scale(to-from, sys.A)
+		// fmt.Printf("A T_s = \n%v\n", mat.Formatted(&tmpMatrix))
+		// TEMP This solution is quite sensitive when the condition number of the
+		// matrix tmpMatrix above is large.
 		tmpMatrix.Exp(&tmpMatrix)
+
 		// Initialize tempV as the initial state with the state dynamics applied.
 		tempV.Reset()
 		tempV.MulVec(&tmpMatrix, value)
+		// fmt.Printf("e^AT_s X(0) = \n%v\n", mat.Formatted(tempV))
 	default:
 		// Reset tempV to the initial value
 		tempV.CloneVec(value)
