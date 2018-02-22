@@ -76,7 +76,7 @@ func TestAnalogSwitchControlPreComputeFilter(t *testing.T) {
 
 	ctrl.PreComputeFilterContributions(stateSpaceModel.A, stateSpaceModel.A)
 
-	for index := 0; index < (2 << uint(ctrl.NumberOfControls)); index++ {
+	for index := 0; index < (1 << uint(ctrl.NumberOfControls)); index++ {
 		fmt.Println("Forward: ")
 		fmt.Println(mat.Formatted(ctrl.controlFilterLookUpForward.GetVector(uint(index))))
 		fmt.Println("Backward: ")

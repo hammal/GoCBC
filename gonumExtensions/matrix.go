@@ -54,3 +54,15 @@ func NANORINF(matrix mat.Matrix) bool {
 	}
 	return false
 }
+
+// Vectorize vectorizes a matrix column wise.
+func Vectorize(matrix mat.Matrix) mat.Vector {
+	M, N := matrix.Dims()
+	res := mat.NewVecDense(M*N, nil)
+	for column := 0; column < N; column++ {
+		for row := 0; row < M; row++ {
+			res.SetVec(row+M*column, matrix.At(row, column))
+		}
+	}
+	return res
+}

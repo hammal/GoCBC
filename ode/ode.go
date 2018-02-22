@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"runtime"
 	"sync"
 
 	"github.com/hammal/adc/ssm"
@@ -228,60 +229,139 @@ func (rk RungeKutta) AdaptiveCompute(from, to, errorTarget float64, value mat.Ma
 // adaptiveComputeVec computes...
 func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector, system DifferentiableSystem) (mat.Vector, error) {
 	var (
-		tmpVec             mat.Vector
-		tmpState1          *mat.VecDense
-		tmpState2          *mat.VecDense
-		currentErrorVector mat.Vector
-		currentError       float64
-		tnow, tnext        float64
-		count              int
+		tmpVec                   mat.Vector
+		tmpState1                *mat.VecDense
+		tmpState2                []*mat.VecDense
+		currentError             float64
+		tnow                     float64
+		tnext, stepLength        []float64
+		count                    int
+		NumberOfParallelSearches int
+		WinningCandidate         int
 	)
 	// Set max number of iterations
-	const maxNumberOfIterations int = 1000000
+	const maxNumberOfIterations int = 1000
+	const searchStepFactor = 4
+
+	// Parallel Receive channels
+	NumberOfParallelSearches = 1
+	if runtime.NumCPU() > 1 {
+		NumberOfParallelSearches = runtime.NumCPU() * 8
+	}
+	ResponseChannel := make([]chan mat.Vector, NumberOfParallelSearches)
+	ComChannel := make([]chan int, NumberOfParallelSearches)
+
+	for channelIndex := range ResponseChannel {
+		ResponseChannel[channelIndex] = make(chan mat.Vector)
+		ComChannel[channelIndex] = make(chan int)
+	}
+
+	tnext = make([]float64, NumberOfParallelSearches)
+	stepLength = make([]float64, NumberOfParallelSearches)
+
+	// fmt.Printf("Number of processors: %v\n", NumberOfParallelSearches)
 
 	// Initialize current time
 	tnow = from
+	for index := range tnext {
+		tnext[index] = tnow
+		// Set the update rate
+		stepLength[index] = to - from
+	}
 
 	M := value.Len()
 	tmpState1 = mat.NewVecDense(M, nil)
-	tmpState2 = mat.NewVecDense(M, nil)
 	tmpState1.CloneVec(value)
+	tmpState2 = make([]*mat.VecDense, NumberOfParallelSearches)
+	for index := range tmpState2 {
+		tmpState2[index] = mat.NewVecDense(M, nil)
+	}
 
 	// Repeat until time to is reached
 	for tnow < to {
 		// Set target time
-		tnext = to
+		// fmt.Printf("\nNew Round! Tnext: ")
+		for index := range tnext {
+			tnext[index] = math.Min(to, tnow+stepLength[index])
+			// fmt.Printf("%v, ", tnext[index])
+		}
+		// fmt.Println()
+		// fmt.Printf("tnow: %v\n", tnow)
 		// Repeat until target error is reached
 		for true {
 			// Copy the current state into tmpState
-			tmpState2.CopyVec(tmpState1)
-			// Execute the Runge Kutta computation
-			tmpVec, currentErrorVector = rk.computeVec(tnow, tnext, tmpState2, system)
-			tmpState2 = tmpVec.(*mat.VecDense)
-			// Reset and compute Error
-			currentError = 0.
-			// count = 0
-			for index := 0; index < tmpState2.Len(); index++ {
-				currentError += math.Abs(currentErrorVector.AtVec(index))
+			for index := range tnext {
+				tmpState2[index].CopyVec(tmpState1)
+				// Execute the Runge Kutta computation
+				// fmt.Printf("Started index %v\n", index)
+				go func(respChannel chan mat.Vector, com chan int, tnow, tnext float64, currentState *mat.VecDense) {
+					tmpVec, currentErrorVector := rk.computeVec(tnow, tnext, currentState, system)
+					for {
+						select {
+						case respChannel <- currentErrorVector:
+							respChannel <- tmpVec
+							return
+						case <-com:
+							return
+						}
+					}
+
+				}(ResponseChannel[index], ComChannel[index], tnow, tnext[index], tmpState2[index])
 			}
-			// Has the target error been achived?
-			// fmt.Printf("Err %v, time %v\n", currentError, tnow)
-			if currentError < err {
+
+			// Find the WinningCandidate. Longest stepLength take presidence
+			WinningCandidate = -1
+			for index := range tnext {
+				// fmt.Printf("Waiting for index %v\n", index)
+				errVec := <-ResponseChannel[index]
+				tmpVec = <-ResponseChannel[index]
+				currentError := mat.Norm(errVec, 1)
+				// fmt.Printf("Received errorVector \n%v\n", mat.Formatted(errVec))
+				if currentError < err {
+					WinningCandidate = index
+					// close go routines
+					for index2 := WinningCandidate + 1; index2 < len(tnext); index2++ {
+						ComChannel[index2] <- 1
+					}
+					break
+				}
+			}
+
+			if WinningCandidate >= 0 {
 				break
 			}
-			// Half the next integration interval and try again
-			tnext = (tnext-tnow)/2. + tnow
 
+			// If not
 			// Increment counter and check if we are allowed more trials
 			count++
 			if count >= maxNumberOfIterations {
-				errorString := fmt.Sprintf("Maximum number of iterations reached adaptive Runge-Kutta doesn't converge\n last error was = %v", currentError)
+				errorString := fmt.Sprintf("Maximum number of iterations reached adaptive Runge-Kutta doesn't converge\n last error was = %v, and only %2.f percent of time was computed", currentError, tnext[0]/to*100)
 				return nil, errors.New(errorString)
 			}
+			// Half the next integration interval and try again
+			// fmt.Print("Reduced steplength: ")
+			for index := range stepLength {
+				stepLength[index] = (tnext[NumberOfParallelSearches-1] - tnow) * math.Pow(searchStepFactor, -float64(index+1))
+				tnext[index] = stepLength[index] + tnow
+				// fmt.Printf("%v, ", stepLength[index])
+			}
+			// fmt.Println()
+
 		}
 		// Save this state and update tnow
-		tmpState1.CopyVec(tmpState2)
-		tnow = tnext
+		tmpState1.CopyVec(tmpVec)
+		// fmt.Printf("Winning Candidate %v\n", WinningCandidate)
+		tnow = tnext[WinningCandidate]
+		tmpStepLength := stepLength[WinningCandidate]
+		// fmt.Printf("time: %.10e\n", tnow)
+		// fmt.Print("New StepLengths: ")
+		for index := range stepLength {
+			stepLength[index] = tmpStepLength * math.Pow(searchStepFactor, float64(NumberOfParallelSearches/2-index))
+			// fmt.Printf("%v, ", stepLength[index])
+		}
+		count = 0
+		// fmt.Println()
+
 	}
 
 	// Successful integration!  Return nil error
@@ -337,7 +417,7 @@ func NewFehlberg45() *RungeKutta {
 		{3. / 32., 9. / 32.},
 		{1932. / 2197., -7200. / 2197., 7296. / 2197.},
 		{439. / 216., -8., 3680. / 513., -845. / 4104.},
-		{-8. / 27., 2, -3544. / 2565., 1859. / 4104., -11. / 40.},
+		{-8. / 27., 2., -3544. / 2565., 1859. / 4104., -11. / 40.},
 	}
 	rk := RungeKutta{temp}
 	return &rk

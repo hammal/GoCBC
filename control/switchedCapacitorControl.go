@@ -181,7 +181,7 @@ func (c SwitchedCapacitorControl) GetLength() int {
 func (c SwitchedCapacitorControl) GetTs() float64 { return c.Ts }
 
 func (c *SwitchedCapacitorControl) PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix) {
-	numberOfControlScenarios := (2 << uint(c.NumberOfControls))
+	numberOfControlScenarios := (1 << uint(c.NumberOfControls))
 
 	analogswitchForward := capacativeSwitch{
 		systemDynamics: forwardDynamics,

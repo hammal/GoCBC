@@ -176,7 +176,7 @@ func (c AnalogSwitchControl) GetLength() int {
 func (c AnalogSwitchControl) GetTs() float64 { return c.Ts }
 
 func (c *AnalogSwitchControl) PreComputeFilterContributions(forwardDynamics, backwardDynamics mat.Matrix) {
-	numberOfControlScenarios := (2 << uint(c.NumberOfControls))
+	numberOfControlScenarios := (1 << uint(c.NumberOfControls))
 
 	analogswitchForward := analogSwitch{
 		systemDynamics: forwardDynamics,

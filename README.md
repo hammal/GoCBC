@@ -44,3 +44,6 @@ are created using one of the functions named New_... located in the same file. A
 - ~~implement reconstruction steady state computations~~
 - IDEA: Check out [Cobra](https://github.com/spf13/cobra) for command line flags
 - IDEA: Check out [Viper](https://github.com/spf13/viper) for configuration files
+- TODO: Post-filteing implementation
+- TODO: Oscillator Control
+- TODO: Eigenvalue decomposition for reconstruction 
