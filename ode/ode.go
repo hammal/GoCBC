@@ -241,7 +241,7 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 	)
 	// Set max number of iterations
 	const maxNumberOfIterations int = 1000
-	const searchStepFactor = 4
+	const searchStepFactor = 2
 
 	// Parallel Receive channels
 	NumberOfParallelSearches = 1
@@ -278,6 +278,7 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 	}
 
 	// Repeat until time to is reached
+	// fmt.Println()
 	for tnow < to {
 		// Set target time
 		// fmt.Printf("\nNew Round! Tnext: ")
@@ -350,6 +351,7 @@ func (rk RungeKutta) adaptiveComputeVec(from, to, err float64, value mat.Vector,
 		}
 		// Save this state and update tnow
 		tmpState1.CopyVec(tmpVec)
+		// fmt.Printf("%v, ", WinningCandidate)
 		// fmt.Printf("Winning Candidate %v\n", WinningCandidate)
 		tnow = tnext[WinningCandidate]
 		tmpStepLength := stepLength[WinningCandidate]

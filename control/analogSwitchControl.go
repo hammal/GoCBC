@@ -3,6 +3,7 @@ package control
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/hammal/adc/gonumExtensions"
 	"github.com/hammal/adc/ode"
@@ -55,7 +56,8 @@ func (c *AnalogSwitchControl) Simulate() [][]float64 {
 
 	t0 := c.T0
 	t1 := t0 + c.Ts
-	rk := ode.NewRK4()
+	// rk := ode.NewRK4()
+	rk := ode.NewFehlberg45()
 	for index := 0; index < c.GetLength(); index++ {
 		// fmt.Printf("State Before \n%v\n", mat.Formatted(tmpState))
 		// fmt.Printf("Current state = \n%v\n", mat.Formatted(tmpState))
@@ -66,7 +68,7 @@ func (c *AnalogSwitchControl) Simulate() [][]float64 {
 		// if the state space model was a linear model. Thus this could be realized
 		// using a pre-computed Ad=e^(A Ts) and then using the Runge-Kutta method
 		// with zero initial state.
-		tmpSimRes, _ = rk.Compute(t0, t1, &tmpState, c.StateSpaceModel)
+		tmpSimRes, _ = rk.AdaptiveCompute(t0, t1, 1e-8, &tmpState, c.StateSpaceModel)
 		// Get the control contributions
 		tmpCtrl, _ = c.getControlSimulationContribution(index)
 		// Add the control contributions
@@ -109,6 +111,26 @@ func (c *AnalogSwitchControl) updateControl(state mat.Vector, index int) {
 		}
 	}
 	c.bits[index] = bitToIndex(bits)
+	// a3 := mat.Inner(c.controls[0].C, I, state)
+	// a4 := mat.Inner(c.controls[1].C, I, state)
+	e1 := math.Pow(state.AtVec(0), 2)
+	e2 := math.Pow(state.AtVec(1), 2)
+	phase := math.Atan2(state.AtVec(1), state.AtVec(0)) / math.Pi * 180
+	// phaseError := math.Atan2(a3, a4) / math.Pi * 180.
+
+	fmt.Printf("\nEnergy: Total = %5.e, PerState = (%5.e, %5.e,) [V^2] and Phase = %+4.f [deg]", e1+e2, e1, e2, phase)
+
+	if index > 0 {
+		if c.bits[index] != c.bits[index-1] {
+			fmt.Print("\tControl Switch!\t")
+			bits1 := indexToBits(c.bits[index-1], len(bits))
+			for index2 := range bits {
+				if bits1[index2] != bits[index2] {
+					fmt.Printf("Nr %d,\t", index2)
+				}
+			}
+		}
+	}
 }
 
 // GetControlSimulationContribution returns the control decision vector

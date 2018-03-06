@@ -33,6 +33,7 @@ func OscillatorBlock(gain, resonanceFrequency float64) SamplingNetwork {
 	system := LinearSystem{
 		A: mat.NewDense(2, 2, []float64{0, -2. * math.Pi * resonanceFrequency, 2. * math.Pi * resonanceFrequency, 0}),
 		// A: mat.NewDense(2, 2, []float64{0, -2. * math.Pi * resonanceFrequency * 2. * math.Pi * resonanceFrequency, 1, 0}),
+		// A: mat.NewDense(2, 2, []float64{0, 1, -2. * math.Pi * resonanceFrequency * 2. * math.Pi * resonanceFrequency, 0}),
 		B: mat.NewDense(2, 2, []float64{gain, 0, 0, gain}),
 		C: mat.NewDense(2, 2, []float64{1, 0, 0, 1}),
 	}
@@ -41,7 +42,7 @@ func OscillatorBlock(gain, resonanceFrequency float64) SamplingNetwork {
 	control[0] = &Oscillator{
 		frequency: resonanceFrequency,
 		phase:     0.,
-		vector:    mat.NewVecDense(2, []float64{0, gain}),
+		vector:    mat.NewVecDense(2, []float64{gain, 0}),
 	}
 
 	control[1] = &Oscillator{
@@ -363,6 +364,8 @@ func FeedbackBlock(system1, system2 SamplingNetwork) SamplingNetwork {
 	// New A matrix
 	var tmpU, tmpL, A, CBf, CBb mat.Dense
 	CBb.Mul(system1.System.B, system2.System.C)
+	// Negative feedback
+	CBb.Scale(-1., &CBb)
 	tmpU.Augment(system1.System.A, &CBb)
 	CBf.Mul(system2.System.B, system1.System.C)
 	tmpL.Augment(&CBf, system2.System.A)

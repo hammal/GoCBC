@@ -74,9 +74,11 @@ func (c *OscillatingControl) Simulate() [][]float64 {
 		tmpCtrl = append(c.Inputs, tmpCtrl2...)
 		c.StateSpaceModel.Input = tmpCtrl
 
+		// fmt.Printf("\n%v\n%v\n", tmpCtrl2[0].U(3), tmpCtrl2[1].U(5.))
+
 		// fmt.Printf("tmpState Before = \n%v\n", mat.Formatted(&tmpState))
 		// tmpSimRes, _ = rk.Compute(t0, t1, &tmpState, c.StateSpaceModel)
-		tmpSimRes, err = rk.AdaptiveCompute(t0, t1, 1e-3, &tmpState, c.StateSpaceModel)
+		tmpSimRes, err = rk.AdaptiveCompute(t0, t1, 1e-8, &tmpState, c.StateSpaceModel)
 		if err != nil {
 			panic(err)
 		}
@@ -276,7 +278,7 @@ func NewAnalogOscillatorControl(length int, controls []signal.VectorFunction, ts
 
 	data := make([]float64, numberOfControls)
 	for index := range data {
-		data[index] = -1000000.
+		data[index] = -1e8
 	}
 	// This is to define leaky integrators --> low pass filters for the bilinear terms
 	I := mat.NewDiagonal(numberOfControls, data)
@@ -290,7 +292,8 @@ func NewAnalogOscillatorControl(length int, controls []signal.VectorFunction, ts
 			// Find all states where the control is added
 			if ctrl[controlIndex].B.AtVec(candidateState) != 0 {
 				// TODO there is several issues with this definition. works only for one oscillator block
-				ABnew.Set(order+numberOfControls-1-controlIndex, (order+numberOfControls)*(controlIndex+len(StateSpaceModel.Input))+candidateState, 1.)
+				// ABnew.Set(order+numberOfControls-1-controlIndex, (order+numberOfControls)*(controlIndex+len(StateSpaceModel.Input))+candidateState, 1.)
+				ABnew.Set(order+controlIndex, (order+numberOfControls)*(controlIndex+len(StateSpaceModel.Input)), 1.)
 			}
 		}
 	}
